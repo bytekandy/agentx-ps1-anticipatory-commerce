@@ -13,7 +13,7 @@ let failed = 0; const check = (name, ok, detail = "") => { console.log((ok ? "PA
 (async () => {
   let w = await load(), $ = id => w.document.getElementById(id);
   check("page loads, slots drawn", $("slots").children.length === 5);
-  check("dev examples listed", $("example").querySelectorAll("option").length > 10, String($("example").querySelectorAll("option").length));
+  check("dev examples listed", $("samples").querySelectorAll(".item").length > 10, String($("samples").querySelectorAll(".item").length));
   // live typing: words go out on each space; the commit shows before the last words
   let text = "";
   for (const word of "beige Loomsy sneakers size 10 under 3000 please do hurry".split(" ")) { text += word + " "; type(w, text); await sleep(120); }
@@ -22,7 +22,7 @@ let failed = 0; const check = (name, ok, detail = "") => { console.log((ok ? "PA
   check("commit card appears before Finish", $("commit").textContent.includes("Loomsy Street Sneakers") && $("commit").textContent.includes("committed after word 8"), $("commit").textContent);
   check("a commit chip is marked", w.document.querySelectorAll(".chip.commit").length === 1);
   $("act").click(); await sleep(500);
-  const newQuery = () => { $("text").disabled = true; $("act").click(); };
+  const newQuery = () => $("plus").click();
   check("final answer shown", $("final").textContent.includes("same as the early commit"), $("final").textContent);
   check("input locked after finish", $("text").disabled === true);
   // editing a sent word is refused
@@ -34,8 +34,8 @@ let failed = 0; const check = (name, ok, detail = "") => { console.log((ok ? "PA
   check("no commit for it", $("commit").classList.contains("empty"));
   // a dev request with a correction, replayed
   w = await load(); $ = id => w.document.getElementById(id);
-  const sel = $("example"); const opt = [...sel.querySelectorAll("optgroup[label='with a correction'] option")][0];
-  sel.value = opt.value; sel.dispatchEvent(new w.Event("change")); $("delay").value = 0; $("act").click(); await sleep(1800);
+  const grp = [...w.document.querySelectorAll("#samples .grp")].find(g => g.textContent === "with a correction"); const opt = grp.nextElementSibling;
+  opt.click(); $("delay").value = 0; $("act").click(); await sleep(1800);
   check("replay reaches the end", $("final").textContent.length > 20 && !$("final").classList.contains("empty"), $("final").textContent);
   check("replay is scored", /Right answer/.test($("evaluation").textContent), $("evaluation").textContent);
   check("replay filled the text box", $("text").value.length > 10);

@@ -17,7 +17,7 @@ function reset() {
   if (api.ws) { api.ws.onclose = null; api.ws.close(); api.ws = null; }
   if (api.es) { api.es.close(); api.es = null; }
   state = {words: 0, committedAt: null}; sent = "";
-  $("text").value = ""; $("text").disabled = false; $("example").value = "";
+  $("text").value = ""; $("text").disabled = false; $("example").value = ""; sampleText = "";
   $("chips").innerHTML = ""; $("conf").style.width = "0"; $("confnum").textContent = "0.00";
   $("flags").innerHTML = ""; $("reason").textContent = ""; $("risk").textContent = "";
   $("slots").innerHTML = SLOTS.map(([k, label]) => `<div class="slot none" id="slot-${k}"><span>${label}</span><b>not mentioned</b></div>`).join("");
@@ -118,19 +118,33 @@ async function finish() {
   } catch (_) {}
 }
 $("text").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(); } });
-/* one button: Send, Replay, or New query, depending on what the box holds */
+/* "+" starts a new query; the arrow sends the typed words or replays the chosen sample */
 function updateAction() {
   const b = $("act"), done = $("text").disabled, sample = $("example").value, typed = $("text").value.trim();
-  $("delaybox").classList.toggle("hidden", !sample || done);
-  b.textContent = done ? "New query" : sample ? "Replay" : "Send";
-  b.disabled = !done && !sample && !typed;
+  if (sample && $("text").value !== sampleText) $("example").value = ""; sampleText = "";
+  const rep = $("example").value;
+  b.title = rep ? "Replay" : "Send"; b.disabled = done || (!rep && !typed);
+  const t = $("text"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px";
 }
-$("act").addEventListener("click", () => {
-  if ($("text").disabled) reset(); else if ($("example").value) replay(); else finish();
-});
+let sampleText = "";
+$("act").addEventListener("click", () => { if ($("example").value) replay(); else finish(); });
+$("plus").addEventListener("click", reset);
 $("text").addEventListener("input", updateAction);
-$("example").addEventListener("change", updateAction);
-$("agent").addEventListener("change", reset);
+$("delay").addEventListener("input", () => { $("delaynum").textContent = $("delay").value + " ms"; });
+
+/* popups: Gemini-style menus that open above the box */
+document.querySelectorAll("[data-pop]").forEach(btn => btn.addEventListener("click", ev => {
+  ev.stopPropagation(); const p = btn.closest(".pop"), was = p.classList.contains("open");
+  document.querySelectorAll(".pop.open").forEach(x => x.classList.remove("open"));
+  if (!was) p.classList.add("open");
+}));
+const closePops = () => document.querySelectorAll(".pop.open").forEach(x => x.classList.remove("open"));
+document.addEventListener("click", ev => { if (!ev.target.closest(".menu")) closePops(); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") closePops(); });
+document.querySelectorAll("#modelpop .item").forEach(it => it.addEventListener("click", () => {
+  document.querySelectorAll("#modelpop .item").forEach(x => x.classList.toggle("on", x === it));
+  $("agent").value = it.dataset.v; $("modelname").textContent = it.dataset.n; closePops(); reset();
+}));
 
 /* replay: the server paces a whole request as server-sent events */
 function replay() {
@@ -153,8 +167,11 @@ async function loadExamples() {
     const q = k => fetch(url("/api/examples", {set: "dev", tag: k, limit: 6})).then(r => r.json());
     const groups = await Promise.all([["plain", "plain"], ["correction", "with a correction"], ["late_constraint", "late constraint"], ["code_mixed", "Hindi-English"]]
       .map(async ([k, label]) => [label, (await q(k)).items]));
-    $("example").innerHTML = '<option value="">Replay a sample...</option>' + groups.filter(([, items]) => items)
-      .map(([label, items]) => `<optgroup label="${label}">${items.map(i => `<option value="${i.id}">${esc(i.text.slice(0, 70))}</option>`).join("")}</optgroup>`).join("");
+    $("samples").innerHTML = groups.filter(([, items]) => items).map(([label, items]) =>
+      `<div class="grp">${label}</div>` + items.map(i => `<button class="item" data-id="${i.id}" data-text="${esc(i.text)}"><span><b>${esc(i.text)}</b></span></button>`).join("")).join("");
+    document.querySelectorAll("#samples .item").forEach(it => it.addEventListener("click", () => {
+      reset(); $("example").value = it.dataset.id; sampleText = $("text").value = it.dataset.text; closePops(); updateAction(); $("text").focus();
+    }));
   } catch (_) {}
 }
 
