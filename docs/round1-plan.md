@@ -49,9 +49,9 @@ agentx1_hack/                      monorepo root (git repo, branch main)
   docs/
     round1-plan.md                 this file
     dev-analysis.md                findings from Stage 1
-    stream-contract.md             trace stream contract (Stage 8)
-    architecture-note.md           1-page architecture note (Stage 10)
-    abstract.md                    max 500 words (Stage 10)
+    stream-contract.md             trace stream contract (Stage 10)
+    architecture-note.md           1-page architecture note (Stage 12)
+    abstract.md                    max 500 words (Stage 12)
   backend/                         Python, standard library only - the main project
     catalogue.csv dev.jsonl evaluate.py search.py README.md    <- Rezolve kit, DO NOT EDIT
     agent.py                       thin entry point: exposes Agent for evaluate.py
@@ -63,15 +63,17 @@ agentx1_hack/                      monorepo root (git repo, branch main)
       slots.py                     pure per-word slot extraction
       state.py                     incremental FilterState: values, confidences, revisions
       catalog_port.py              CatalogPort interface + adapter over tools.search
+      risk.py                      RiskModel interface, HeuristicRisk, LearnedRisk (Stage 6)
+      spelling.py                  noisy-channel spelling correction (Stage 7)
       policy.py                    search scheduling + commit policy
       agent.py                     orchestrator implementing the kit's Agent interface
       trace.py                     per-word decision trace records
-    server/                          thin streaming interface for the UI (Stage 8)
+    server/                          thin streaming interface for the UI (Stage 10)
     tests/                         test_<module>.py, unittest
     scripts/                       analyze_dev.py, report.py
     data/dev_extra.jsonl           our own extra requests, dev format
     outputs/                       committed run outputs (results.jsonl) for the submission
-  frontend/                        base UI (Stage 9; specs discussed then)
+  frontend/                        base UI (Stage 11; specs discussed then)
 ```
 
 **Conventions**
@@ -81,7 +83,7 @@ agentx1_hack/                      monorepo root (git repo, branch main)
 - **Commits (Conventional Commits):** `type(scope): imperative subject`, 72 characters or fewer. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `chore`. Scopes: `backend`, `frontend`, `docs`, `slots`, `policy`, `eval`. Example: `feat(slots): extract budget from number words`. Never add Claude as co-author.
 - **Branches:** `stage-<n>/<short-kebab>` (see section 4). Fixes after a stage merged: `fix/<short-kebab>`.
 - **Tag:** `r1-submission` on the exact commit that is submitted.
-- **Frontend:** conventions (language, framework, file naming) decided in Stage 9 together with the UI specs.
+- **Frontend:** conventions (language, framework, file naming) decided in Stage 11 together with the UI specs.
 
 ---
 
@@ -123,7 +125,9 @@ finish(): re-read the full request -> final search -> return product_id
 - **Slots:** category, colour, brand, size, max_price (plus min_price if seen). Each slot holds a value, a confidence, and a revision history.
 - **Revisions:** markers like "oops", "no wait", "sorry I meant", "actually" replace the earlier slot value and start a cooldown before that slot is trusted again.
 - **Commit rule (user confirmed):** commit once the remaining candidates cannot be separated by anything the shopper might still add. Candidate rows differ by size, so sized categories normally wait for the size; unsized categories (backpacks, caps, headphones, watches, wallets) can commit earlier.
-- **Key risk for Stage 6:** corrections, not late constraints. Stage 1 showed a unique match built from correctly read values can only be overturned by a correction (or a misread); late constraints never invalidate it. Measure per-slot correction risk and clause-boundary signals, then set the thresholds in `config.py`.
+- **Hybrid layer (team leader's request, decided 2026-11-26):** the rules read the request and stay the backbone. Learned or statistical parts answer how risky a commit is (`risk.py`, Stage 6) and recover misspellings (`spelling.py`, Stage 7). Everything is trained offline in pure Python and shipped as small JSON, so the runtime stays standard-library only. Possible later additions (after Round 1): a probability over candidate products instead of a single guess, and a soft lexicon from pretrained word vectors. No language model.
+- **Commit rule as expected value (technique A):** committing now is worth it when `P(wrong) x (1.0 + earliness forfeited)` is smaller than the earliness gained by not waiting, which in practice means a risk below about 4 percent when it saves one word and about 12 percent when it saves four (derived from the score formula; the exact budget is tuned in `config.py`).
+- **Key risk (Stages 5 to 8):** corrections, not late constraints. Stage 1 showed a unique match built from correctly read values can only be overturned by a correction (or a misread); late constraints never invalidate it. Measure per-slot correction risk and clause-boundary signals, then set the thresholds in `config.py`.
 - **Confidence:** exact catalogue match high; synonym medium; number-word parse and ambiguous tokens (for example a bare "M") lower, raised by context.
 - **Final check:** `finish()` ignores earlier guesses, reads the whole request, searches once more, and returns that result.
 
@@ -163,47 +167,61 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`, `backend/scripts/state_replay.py`; adds a state block to `config.py`; makes `size_fits_category` public in `slots.py` (a rename).
 - **Exit:** unit tests green; replaying dev requests word by word gives the gold filters at the last word for at least 95% of plain and correction requests.
 
-### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - todo
-- `catalog_port.py`, `policy.py`, `trace.py`, `anticipatory/agent.py`, `backend/agent.py`. Conservative thresholds first; verification in `finish()`.
+### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - doing
+- `catalog_port.py` (interface over the counted `tools.search`, with a fake for tests), `risk.py` (the `RiskModel` interface plus a hand-coded `HeuristicRisk`), `policy.py` (search scheduling and the decision-theoretic commit rule, see section 5), `trace.py` (one record per word), `anticipatory/agent.py` (orchestrator over `FilterState`), `backend/agent.py` (entry point for `evaluate.py`). Conservative thresholds first; verification in `finish()`.
 - **Owns:** those files, `backend/tests/test_policy.py`, `backend/tests/test_agent.py`; adds a policy block to `config.py`.
-- **Exit:** `python evaluate.py --agent agent.py` runs; accuracy at or above baseline; zero wrong commits on the plain subset; score above 20.
+- **Exit:** `python evaluate.py --agent agent.py` runs; accuracy at or above baseline; zero wrong commits on the plain subset; score above 20. The score and per-tag table are recorded as the baseline for the hybrid comparison in Stage 6.
 
-### Stage 6 - Robustness and tuning - `stage-6/robustness` - todo
+### Stage 6 - Learned risk model (hybrid) - `stage-6/risk-model` - todo
+- A calibrated model that answers "how likely is the current best product to be wrong?" and replaces `HeuristicRisk` behind the same `RiskModel` interface (technique B; the commit rule is technique A from Stage 5).
+- `scripts/make_training_data.py`: synthetic requests generated from `catalogue.csv` with templates and noise rates mined from dev (corrections about 18 percent, markers, number phrasing, fillers, late constraints), replayed word by word through `FilterState`; every prefix is labelled "is the current unique candidate the final target?". `dev.jsonl` is never training data: it is the held-out check.
+- `scripts/train_risk.py`: pure-Python logistic regression with calibration (Platt or isotonic); writes `backend/anticipatory/data/risk_model.json`. `risk.py` gains a standard-library-only `LearnedRisk` that loads it.
+- Safety rule: the learned model may only make the agent more cautious than the rule floor (`max` of the two risks), never less.
+- **Owns:** `backend/scripts/make_training_data.py`, `backend/scripts/train_risk.py`, `backend/anticipatory/data/risk_model.json`, `backend/tests/test_risk.py`; extends `risk.py`; adds a risk block to `config.py`.
+- **Exit:** calibration error reported on dev (held out); wrong commits at or below the heuristic; score at or above the heuristic, per-tag table in the PR. If it does not beat the heuristic, the PR says so and the heuristic stays the default.
+
+### Stage 7 - Noisy-channel spelling (hybrid) - `stage-7/spelling` - todo
+- `spelling.py`: candidates within one edit (two for long words) of a known word, scored by an edit model (keyboard-adjacent substitutions and transpositions cheaper) times a word prior from the catalogue, with guard words so common English words are never "corrected" (technique D). Extends the brand-only fuzzy match to every slot at lower confidence.
+- **Owns:** `backend/anticipatory/spelling.py`, `backend/tests/test_spelling.py`; small additive hook in `lexicon.py`; a spelling block in `config.py`.
+- **Exit:** at least 90 percent of single-typo variants of catalogue values recovered in a synthetic test; zero new stray matches on dev; wrong commits not higher than Stage 6.
+
+### Stage 8 - Robustness and tuning - `stage-8/robustness` - todo
 - Late constraints, Hindi-English handling, correction edge cases; tune `config.py` values.
 - Build `data/dev_extra.jsonl` (60 or more invented requests with unseen phrasings and tricky corrections).
 - Tune on about two thirds of dev; validate on the rest plus `dev_extra.jsonl` to avoid overfitting.
 - **Owns:** `backend/data/dev_extra.jsonl`, scenario tests, small additive changes to earlier modules and `config.py` values.
 - **Exit:** zero wrong commits on dev (or each exception documented); per-tag table recorded in the PR.
 
-### Stage 7 - Evaluation and hardening - `stage-7/evaluation` - todo
+### Stage 9 - Evaluation and hardening - `stage-9/evaluation` - todo
 - `scripts/report.py` (per-tag, latency and searches summary); edge-case tests (empty words, very long requests, odd punctuation); code cleanup; finish the root `README.md` run steps.
 - Generate `backend/outputs/results.jsonl` with `--log` from the final agent.
 - **Owns:** `backend/scripts/report.py`, `backend/outputs/results.jsonl`, `backend/tests/test_edge_cases.py`, `README.md` updates.
 - **Exit:** full test suite green; results file produced; numbers frozen for the abstract and note.
 
-### Stage 8 - Stream interface - `stage-8/stream-interface` - todo
+### Stage 10 - Stream interface - `stage-10/stream-interface` - todo
 - A thin backend interface that replays or live-feeds a request and streams the trace records; the contract is written down so backend and UI can be built independently. Transport (for example standard-library HTTP with server-sent events) is decided here.
 - **Owns:** `backend/server/`, `docs/stream-contract.md`, tests for the interface.
 - **Exit:** a client can submit words one by one and receive trace records; contract documented; tests green.
 
-### Stage 9 - Base UI - `stage-9/base-ui` - todo
+### Stage 11 - Base UI - `stage-11/base-ui` - todo
 - Specs are discussed with the user at the start of this stage; this is only the starting point.
 - Starting point: a UI that replays or live-types a request word by word and shows slots, confidences, candidate count and the commit moment, driven by the stream interface.
 - Create `frontend/`, agree its conventions, add a short run guide.
 - **Owns:** `frontend/` only (plus a `README.md` run-steps section).
 - **Exit:** the UI runs end to end against the real agent on dev requests, including a correction case; it is good enough to record the demo video from.
 
-### Stage 10 - Submission package - `stage-10/submission-package` - todo
+### Stage 12 - Submission package - `stage-12/submission-package` - todo
 - `docs/architecture-note.md` (1 page), `docs/abstract.md` (500 words or fewer: impact, cost estimate, innovation, build summary).
 - 3-minute demo video recorded from the UI (the video itself lives outside git).
 - Drive folder with documents + repo link + video, sharing set to "anyone with the link can view"; paste the folder link into the "Submission Link" field; test the link in a private window first.
 - **Owns:** `docs/architecture-note.md`, `docs/abstract.md`.
 - **Exit:** PR merged; submitted and confirmation saved; tag `r1-submission` on the submitted commit.
 
-### Stage 11 - Finals prep (after Round 1) - `stage-11/finals-prep` - todo
+### Stage 13 - Finals prep (after Round 1) - `stage-13/finals-prep` - todo
 - Voice demo through browser speech-to-text feeding words to the backend.
 - Wasted-search limit exposed as a setting in the UI.
 - Fresh hidden-set robustness; latency and cost numbers; live jury test practice; 10-minute pitch.
+- Hybrid extras if not done earlier: a probability over candidate products (technique C) and a soft lexicon from pretrained word vectors (technique E).
 - LLM reader only if the user decides to add one.
 - This stage may split into several branches once the finals details are known.
 
@@ -236,14 +254,14 @@ Impact (earlier, safer shopping assistance) / Build summary (layered rules engin
 
 | Risk | Mitigation |
 |---|---|
-| Limited time before the deadline | Small stages; Stages 2 to 6 are the core; keep the UI small; skip nothing in the merge gate |
+| Limited time before the deadline | Small stages; Stages 2 to 8 are the core; keep the UI small; skip nothing in the merge gate |
 | PR review waits block the next stage | Keep PRs small so review is quick; ask before stacking if one is still open |
 | Merge conflicts | Section 4 rules: sequential stages, disjoint files, additive config blocks |
 | Overfitting to dev | Rules over memorised strings; held-out split; `dev_extra.jsonl` |
 | Hidden set has unseen wording | Generalising synonym and number handling; conservative confidence |
-| Late constraint invalidates a commit | Policy waits when a constraint is statistically likely; measured in Stage 6 |
+| Late constraint invalidates a commit | Policy waits when a constraint is statistically likely; measured in Stages 6 and 8 |
 | Wrong commit penalty | Hard gate of zero on dev; default action is wait |
-| UI scope creep | Specs agreed at the start of Stage 9; UI shows trace only, no logic |
+| UI scope creep | Specs agreed at the start of Stage 11; UI shows trace only, no logic |
 | Submission mishap | Submit early; test the Drive link privately |
 
 ---
@@ -251,4 +269,4 @@ Impact (earlier, safer shopping assistance) / Build summary (layered rules engin
 ## 9. Open decisions
 
 - Merge style for PRs: squash and merge is proposed (linear `main`); confirm at the first PR.
-- UI specs, framework and how it talks to the backend - discussed at Stage 8 and Stage 9.
+- UI specs, framework and how it talks to the backend - discussed at Stage 10 and Stage 11.
