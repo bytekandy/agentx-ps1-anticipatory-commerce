@@ -2,7 +2,7 @@
 
 Same agent as `agent.py`, but the commit policy asks the logistic-regression risk model
 (`anticipatory/data/risk_model.json`) alone, without the hand-coded rules for fresh values.
-It scores higher on dev but makes wrong commits on corrections; see `docs/round1-plan.md`.
+It scores higher on dev but makes wrong commits on corrections; see `docs/assumptions-and-data.md`.
 """
 from anticipatory.agent import AnticipatoryAgent
 from anticipatory.policy import ToolsCatalog

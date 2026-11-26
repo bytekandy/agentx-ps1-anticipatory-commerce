@@ -2,102 +2,100 @@
 
 Entry for **AgentX: The Agentic Commerce Challenge** (Techfest 2026-27, IIT Bombay, by Rezolve.ai), Problem Statement 1.
 
-A shopping request arrives one word at a time, for example "black running shoes, size nine, under two thousand...". The agent predicts the shopper's filters (category, colour, size, budget, brand) from the words so far, searches early, and commits to a product as soon as it is safe to, aiming never to commit to a wrong one (none on the public dev set; about 0.25% of 20,000 synthetic requests). Text only. No large language model is used; the only learned part is a 22-weight logistic regression for the commit risk.
+## What it does
 
-## Status
+A shopping request arrives one word at a time: "black running shoes, size nine, under two thousand...". After every word the agent keeps a running reading of what the shopper wants (category, colour, size, brand, budget), and decides whether to **wait**, **search** the catalogue, or **commit** to one product right now. Committing early is rewarded, committing to the wrong product is punished harder, so the agent commits only when exactly one product matches and the estimated chance of being wrong is below the break-even point derived from the scoring formula (about 3.9%). Text only, English and Hindi-English. No language model: rules, a spelling corrector, and a small statistical model for the commit risk.
 
-The backend and its stream interface are complete for Round 1; the base UI and the submission package come next (see `docs/round1-plan.md`). On the public dev set the agent scores **43.5** against the kit baseline's 20.0, with every final answer right and no wrong early commit. On 87 extra hand-written requests with phrasing the dev set does not contain (`backend/data/dev_extra.jsonl`) it scores 40.5 (accuracy 0.989) against the baseline's 31.3 (0.793). It uses about 1.5 ms of CPU per request, no model API, and only the Python standard library. The full numbers, per-tag tables and the cost figures are in [`backend/outputs/report.md`](backend/outputs/report.md), and the per-request output on the dev set, as the organisers ask for, is `backend/outputs/results.jsonl`.
+How it is scored (the organisers' `evaluate.py`): 0.4 for the right final answer, plus 0.6 times the share of the request still to come at the first right commit, minus 1.0 per wrong commit, minus 0.02 per search after the first.
+
+On the public dev set: **43.5** against the kit baseline's 20.0, every final answer right, no wrong early commit. On 87 extra hand-written requests with unseen phrasing: 40.5 against 31.3. About 1.5 ms of CPU per request, no model API. Full numbers: [`backend/outputs/report.md`](backend/outputs/report.md); per-request dev output (as the organisers ask): `backend/outputs/results.jsonl`.
+
+## How the agent thinks
+
+```
+word -> tokens -> slot reader -> filter state -> commit policy -> search
+                      |              |               |
+                spelling, numbers,  one belief    risk model (rules + learned),
+                synonyms, cues      per slot,     break-even rule, exactly one match
+                                    corrections
+```
+
+The agent code is the package `backend/anticipatory/` (Python standard library only):
+
+| File | Role |
+|---|---|
+| `tokens.py` | normalises each word ("Rs.1,500," becomes 1500, "UK10" becomes "UK", "10"); also English word frequencies |
+| `numbers.py` | prices and sizes from digits, "3.5k", English and Hindi number words |
+| `lexicon.py` | categories, colours, brands, sizes from the catalogue, a seed synonym list, cue words |
+| `spelling.py` | noisy-channel typo correction of product and cue words; real English words are never "corrected" |
+| `slots.py` | turns the words so far into slot mentions with confidences ("size 9" versus "under 900") |
+| `unknown.py` | notices constraints the shop cannot answer (a brand, size or colour it does not sell) so the agent does not commit early on them |
+| `state.py` | the running reading: one belief per slot, corrections ("black, oops, navy"), numbers still growing |
+| `risk.py` | chance a commit is wrong: hand-coded rules, a 22-weight logistic regression, and a hybrid of both |
+| `policy.py` | the only door to the catalogue (counted searches) and the rule for when to search and commit |
+| `agent.py` | the orchestrator that implements the kit's `start / observe / finish` and records a trace per word |
+| `learned.py` | optional words taught by earlier requests (`data/learned_lexicon.json`; absent means unknown words are dropped) |
+| `config.py` | every tunable number, in one place |
+
+`backend/agent.py` is the entry point the evaluator loads (the hybrid); `agent_heuristic.py` (rules only) and `agent_learned.py` (learned risk only) are comparison variants.
 
 ## Repository layout
 
-This is a monorepo.
-
 ```
-backend/     Python (standard library only): the agent and the Rezolve starter kit
-  anticipatory/   the agent package (see below)
-  data/           our own extra test requests (dev_extra.jsonl)
-  outputs/        results on dev and dev_extra, and the generated report
-  server/         a thin streaming interface over the agent, for the UI (REST, WebSocket, server-sent events)
-  scripts/        analysis, training, report and test-data builders
-  tests/          unit and scenario tests
-frontend/    base UI (added in a later stage)
-docs/        plan, analysis, architecture note, abstract
-```
-
-`backend/` also holds the unmodified starter kit from Rezolve: `catalogue.csv`, `dev.jsonl`, `search.py`, `evaluate.py` and the kit's own `README.md`. These five files are never edited; our code sits beside them.
-
-## Run
-
-Requires Python 3.14 (the version it was built and tested on). Nothing to install.
-
-```
-cd backend
-python evaluate.py                    # score the kit's baseline on dev.jsonl
-python search.py white Pacevo sneakers  # try the local catalogue search
+backend/
+  agent.py agent_heuristic.py agent_learned.py   entry points for evaluate.py
+  anticipatory/    the agent package (table above), with data/ (english_words.tsv, risk_model.json)
+  server/          optional FastAPI stream interface: REST, WebSocket, server-sent events
+  scripts/         ask.py, report.py, check_reader.py, train_risk.py, make_training_data.py,
+                   build_dev_extra.py, analyze_dev.py, learn_lexicon.py, stream_client.py
+  tests/           unit, scenario, edge-case and server tests
+  data/            dev_extra.jsonl: 87 hand-written test requests
+  outputs/         committed results on dev and dev_extra, and the generated report
+  catalogue.csv dev.jsonl search.py evaluate.py README.md   Rezolve's starter kit, never edited
+frontend/          the web page (chat layout, plain JavaScript, no build step), served by the server
+docs/              abstract, architecture note, assumptions and data, stream contract
 ```
 
-Score our agent on the dev set (`agent.py` is the hybrid: hand-coded rules for fresh values, a learned risk model for calm states):
+## Run it
+
+Requires Python 3.14. The agent needs nothing installed. Run everything from `backend/`.
 
 ```
-python evaluate.py --agent agent.py
-python evaluate.py --agent agent.py --data data/dev_extra.jsonl   # 87 extra hand-written requests (unseen phrasing)
-python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference)
-python evaluate.py --agent agent_learned.py     # learned risk model only
+python evaluate.py --agent agent.py                                  # score on dev (the official scorer)
+python evaluate.py --agent agent.py --data data/dev_extra.jsonl      # the 87 extra requests
+python evaluate.py --agent agent_heuristic.py                        # comparison variants
+python scripts/ask.py "beige Loomsy sneakers size 10 under 3000"     # ask in the terminal, word by word
+python scripts/report.py                                             # regenerate outputs/ (about 15 s)
+python -m unittest discover -s tests -t .                            # tests
 ```
 
-Run the stream interface the UI will talk to. It is optional and uses well-known packages (FastAPI, uvicorn, httpx, websockets; Python 3.11 or newer), kept apart from the agent, which stays standard library only. Contract: [`docs/stream-contract.md`](docs/stream-contract.md).
+The optional web interface and stream server use well-known packages and Python 3.11 or newer; the agent does not:
 
 ```
-pip install -r requirements-server.txt   # once
-python -m server                         # http://127.0.0.1:8765 (this machine only), docs at /docs
-python -m server --static ../frontend    # also serves the web page at http://127.0.0.1:8765/
-python scripts/ask.py "beige Loomsy sneakers size 10 under 3000"   # ask the agent in the terminal, no server needed
-python scripts/learn_lexicon.py log.jsonl                  # teach the agent words from logged requests (optional)
+pip install -r requirements-server.txt
+python -m server --static ../frontend        # page and API at http://127.0.0.1:8765/ (docs at /docs)
 python scripts/stream_client.py --live "beige Loomsy sneakers size 10 under 3000"      # WebSocket
-python scripts/stream_client.py --rest "beige Loomsy sneakers size 10 under 3000"      # stateless POSTs
 python scripts/stream_client.py --replay-example dev-0004 --delay 300                  # server-sent events
 ```
 
-It refuses to listen beyond this machine without an API key (`--api-key` or `STREAM_API_KEY`); other web origins must be allowed with `--cors-origin`.
+It listens on this machine only and refuses another address without an API key (`--api-key` or `STREAM_API_KEY`). The protocol is in [`docs/stream-contract.md`](docs/stream-contract.md).
 
-Regenerate the committed outputs (results on dev and dev_extra, and the report with per-tag tables and the cost and speed numbers; about 15 seconds; scoring is the organisers' own `evaluate.py`, imported unchanged):
+Other scripts: `scripts/train_risk.py` retrains the risk model on synthetic requests (pure Python, about two minutes), `scripts/build_dev_extra.py` rebuilds the extra requests, `scripts/check_reader.py slots|state` measures the reader against dev, `scripts/analyze_dev.py` reproduces the dev findings, `scripts/learn_lexicon.py log.jsonl` teaches the agent words from logged requests.
 
-```
-python scripts/report.py
-```
+## Documents
 
-Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`. Rebuild the extra test requests: `python scripts/build_dev_extra.py`.
-
-Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`). The server tests skip themselves when the optional packages are not installed, so the agent's own tests need nothing but Python:
-
-```
-python -m unittest discover -s tests -t .
-```
-
-The agent code lives in the package `backend/anticipatory/` (standard library only). Layers, from the words up:
-
-- **Reading the words:** `tokens.py` (normalise words, and general English word frequencies), `numbers.py` (prices and sizes as digits, "3.5k" or English and Hindi number words), `lexicon.py` (categories, colours, brands and sizes from the catalogue, plus a seed synonym list), `spelling.py` (noisy-channel correction of typed product words), `slots.py` (slot mentions with confidences: size or price decided by cue words such as "size", "UK", "under", "tak").
-- **Knowing what the shopper wants:** `state.py` (the running reading: one belief per slot, corrections such as "black, oops, navy", warning flags), `unknown.py` (constraints the shop cannot answer: an unknown brand, size, colour or style).
-- **Deciding:** `risk.py` (how likely a commit is to be wrong: hand-coded rules and a learned logistic regression, combined), `policy.py` (the catalogue port, and when to search and when to commit, from the break-even of the score formula), `agent.py` (the orchestrator and its per-word trace record).
-
-Check the reader against dev with `python scripts/check_reader.py slots` and `python scripts/check_reader.py state` (from `backend/`).
-
-For the data sources, every assumption, what dev influenced, and the verification behind these numbers, read [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md).
-
-## Known limits
-
-- **The synonym list is hand-written.** `backend/anticipatory/lexicon.py` holds a seed list of about 90 synonyms (some read off the dev set, some guessed, the guesses marked in the code). A synonym nobody listed ("trainers") is not understood. The agent then notices a word it cannot place (see below) and does not commit early. A soft lexicon from pretrained word vectors is planned for after Round 1 (see the plan, finals prep).
-- **Things we do not sell are noticed, not guessed.** A brand we do not stock ("from Nike"), a size that does not exist ("size 14", "4XL", "size 32 sandals"), or a colour or style we do not have ("purple shirt") is flagged as unresolved: the agent does not commit early, and the trace says what it could not match. No list of brands, sizes or colours is used. The structure of the request plus a general English word-frequency list decide.
-- Everything else the agent knows about products (categories, colours, brands, sizes, prices) is read from `catalogue.csv`; no dev request or answer is stored in the code.
+- [`docs/abstract.md`](docs/abstract.md): impact, what was built, results, cost estimate, innovation.
+- [`docs/architecture-note.md`](docs/architecture-note.md): one-page architecture.
+- [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md): data sources (including every synthetic set), assumptions, what dev influenced, evidence and its limits, verification, known limitations, the learned lexicon, what the dev set shows.
+- [`docs/stream-contract.md`](docs/stream-contract.md): the stream interface.
 
 ## Data sources
 
-- `backend/catalogue.csv`, `backend/dev.jsonl`, `backend/evaluate.py`, `backend/search.py`: the organisers' starter kit, unchanged.
-- `backend/anticipatory/data/english_words.tsv`: the 60,000 most frequent English words with their counts, from Peter Norvig's `count_1w.txt` (https://norvig.com/ngrams/count_1w.txt), a subset of the Google Web Trillion Word Corpus counts distributed by the Linguistic Data Consortium. The data is distributed for educational and research use; it is used here only to tell real words from typos and to rank how common a word is. Check the licence before any commercial use.
-- `backend/anticipatory/data/risk_model.json`: the learned risk model, trained by `backend/scripts/train_risk.py` on synthetic requests we generate ourselves.
+- `backend/catalogue.csv`, `dev.jsonl`, `evaluate.py`, `search.py`: the organisers' starter kit, unchanged.
+- `backend/anticipatory/data/english_words.tsv`: the 60,000 most frequent English words with counts, from Peter Norvig's `count_1w.txt` (https://norvig.com/ngrams/count_1w.txt), a subset of Google Web Trillion Word Corpus counts distributed by the Linguistic Data Consortium for educational and research use. It only tells real words from typos and ranks how common a word is.
+- `backend/anticipatory/data/risk_model.json`: the risk model, trained by `scripts/train_risk.py` on synthetic requests generated from the catalogue.
+- Fonts in `frontend/fonts/`: Geist and Geist Mono (SIL Open Font License, licence file included).
 
-## Working on this repo
+## Known limits
 
-- One branch per stage, named `stage-<n>/<short-kebab>`, merged into `main` through a pull request.
-- Commits follow Conventional Commits (`feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `chore`).
-- The full plan, design principles, naming conventions and git workflow are in [`docs/round1-plan.md`](docs/round1-plan.md).
+The seed synonym list is hand-written, so a synonym nobody listed ("trainers") is not understood: the agent notices a word it cannot place and does not commit early on it (an optional learning lexicon can be taught such words). A brand, size or colour the shop does not sell is flagged, not guessed. A correction long after the value it replaces cannot be predicted, which costs a wrong early commit in about 0.25% of synthetic requests. The full list, with the evidence behind every number, is in [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md).

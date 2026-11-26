@@ -78,7 +78,7 @@ class EndToEndTest(unittest.TestCase):
         for heading in ("## dev", "## dev_extra", "## Cost, speed and size", "### By tag"):
             self.assertIn(heading, text)
         self.assertIn(f"{evaluate.summarise(direct)['score']:.1f}", text)
-        self.assertIn("Python 3.9+ standard library only", text)
+        self.assertIn("Python 3.14, standard library only", text)
 
 
 if __name__ == "__main__":
