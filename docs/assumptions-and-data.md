@@ -142,7 +142,10 @@ Resolved or decided; the open ones come first.
   word it cannot place and does not commit early on it; the final answer is the best match
   without it. Stage 15 added a learning lexicon instead of pretrained vectors (below): words are
   taught by earlier requests, in a separate optional file.
-- **A comma between a cue and its number** ("size, nine") is still read as a pause (Stage 13 fixed commas inside phrases and typos in cue words).
+- **Commas near numbers** (Stage 16): a cue keeps its number across a comma ("size, nine",
+  "under, 1500"). Still open on purpose: a comma inside a spoken number ("one thousand, five
+  hundred") ends the number, because merging would also turn "two thousand, nine UK" into 2009.
+  Commas after every third word now change 7 of 383 final answers (34 before Stage 13), 0 wrong commits.
 - **Half sizes** ("10.5"): fixed in Stage 14. The shop has none, so the size is reported as
   unresolved: no early commit, and the final answer is the best match without it.
 - **A shopper who contradicts themselves without a marker** ("size 9 size 10", "red black"):
