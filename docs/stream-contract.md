@@ -93,6 +93,7 @@ nothing.
 | `GET /api/info` | Version, agents, limits, dataset sizes, break-even risk, `auth_required` | `200` |
 | `POST /api/step` | The event for the last of the words so far. Body: `{"words": ["beige", "Loomsy"], "agent": "hybrid", "request_id": null}` | `200` **word** event |
 | `POST /api/answer` | The final answer for a finished request. Same body | `200` **final** event |
+| `POST /api/feedback` | The shopper accepted this product for this request; the agent remembers what words it could not place probably meant (`learned_lexicon.json`, read at the next start). Body: `{"words": ["black", "sliders"], "product_id": "P0001"}` | `200 {"learned": [...]}` |
 | `POST /api/run` | Every event of a whole request at once. Same body | `200 {"events": [...]}` |
 | `GET /api/replay?text=...` or `?example=dev-0004` | Stream a whole request as server-sent events. Also `agent=` and `delay_ms=` (default 400, capped at 2000) | `200` event stream |
 | `GET /api/examples?set=dev&tag=correction&limit=50&offset=0` | List dev or dev_extra requests (`set`: `dev`, `dev_extra`; `tag` optional, `plain` allowed) | `200` list |

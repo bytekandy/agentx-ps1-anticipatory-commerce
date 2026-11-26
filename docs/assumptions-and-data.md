@@ -140,7 +140,8 @@ Resolved or decided; the open ones come first.
 
 - **Synonyms outside the seed list are not understood** ("sliders", "lowers"). The agent notices a
   word it cannot place and does not commit early on it; the final answer is the best match
-  without it. Planned: a soft lexicon from word vectors after Round 1.
+  without it. Stage 15 added a learning lexicon instead of pretrained vectors (below): words are
+  taught by earlier requests, in a separate optional file.
 - **A comma between a cue and its number** ("size, nine") is still read as a pause (Stage 13 fixed commas inside phrases and typos in cue words).
 - **Half sizes** ("10.5"): fixed in Stage 14. The shop has none, so the size is reported as
   unresolved: no early commit, and the final answer is the best match without it.
@@ -157,3 +158,27 @@ Resolved or decided; the open ones come first.
 - **Python:** only 3.14 is supported (decision above).
 - **Web page and server** (Devanagari words, Python 3.11+ for the server, no TLS): out of scope.
   The page is an optional extra and is not evaluated.
+
+## 7. The learned lexicon (Stage 15)
+No pretrained word-vector file was used (too large to ship; user decision). Instead the agent can
+be taught words by use. This needs no external data.
+
+- **Separate, optional file:** `backend/anticipatory/data/learned_lexicon.json` (git-ignored). The
+  agent only reads it, at start. **When the file is absent, a word the lexicon cannot place is
+  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.5 is measured
+  without it).
+- **Evidence:** (1) a correction in a request ("sliders, I mean sandals" teaches sliders = sandals);
+  (2) an accepted product (the "This is what I wanted" button, `POST /api/feedback`): if exactly one
+  unknown word was said and exactly one of category, colour and brand was not, they are linked;
+  (3) repeat evidence: a word is used only after 2 agreeing observations and is switched off when
+  evidence against it (an accepted product that disagrees) reaches half of the support.
+- **Safety:** learned words never override a catalogue or seed word, can only name values that exist
+  in the shop, and read at confidence 0.60 (like a spell-corrected word), so the agent does not
+  commit early on them lightly.
+- **Teaching:** `python scripts/learn_lexicon.py log.jsonl` (offline) or the server endpoint; a
+  change is used the next time the agent starts. The agent itself never writes, so a harness run
+  stays read-only and deterministic.
+- **Limits:** one word maps to one meaning; slots are category, colour and brand (not size or
+  price); it only learns a word that appears in a correction or an accepted request; the server
+  has to be restarted to use new words. A shared learned file could be poisoned by bad feedback;
+  there is no per-user separation.

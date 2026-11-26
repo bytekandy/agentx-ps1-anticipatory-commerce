@@ -137,6 +137,11 @@ def create_app(service: Optional[StreamService] = None, settings: Settings = Set
     def run(body: models.RunRequest):
         return {"events": service.run(body.words, body.agent, body.request_id)}
 
+    @api.post("/feedback", response_model=models.FeedbackResult, tags=["live"],
+              summary="Tell the agent this product was what the shopper wanted")
+    def feedback(body: models.FeedbackRequest):
+        return service.feedback(body.words, body.product_id)
+
     # -- replay as server-sent events ---------------------------------------------------------
 
     def replay_events(text: Optional[str] = Query(None), example: Optional[str] = Query(None),

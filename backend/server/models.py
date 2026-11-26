@@ -112,6 +112,16 @@ class RunRequest(BaseModel):
     request_id: Any = None
 
 
+class FeedbackRequest(BaseModel):
+    """The shopper accepted this product for this request."""
+    words: List[str]
+    product_id: str
+
+
+class FeedbackResult(BaseModel):
+    learned: List[Any] = Field(description="What was remembered: {word, slot, value}; empty if nothing")
+
+
 class RunResult(BaseModel):
     events: List[Any] = Field(description="start, one word event per word, then final")
 

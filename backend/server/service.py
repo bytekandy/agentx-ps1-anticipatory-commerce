@@ -24,6 +24,7 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence
 from anticipatory.agent import AnticipatoryAgent
 from anticipatory.catalog_port import ToolsCatalog
 from anticipatory.config import DEFAULT_CONFIG, Config
+from anticipatory.learned import LearnedStore, learn_from_request
 from anticipatory.lexicon import Lexicon
 from anticipatory.policy import break_even_risk
 from anticipatory.risk import HeuristicRisk, HybridRisk, LearnedRisk
@@ -134,7 +135,9 @@ class Run:
 
 class StreamService:
     def __init__(self, config: Config = DEFAULT_CONFIG, limits: Limits = Limits(),
-                 lexicon: Optional[Lexicon] = None, directory: Optional[ProductDirectory] = None):
+                 lexicon: Optional[Lexicon] = None, directory: Optional[ProductDirectory] = None,
+                 learned_path: Optional[Path] = None):
+        self.learned_path = learned_path       # None: the default learned_lexicon.json
         self.config = config
         self.limits = limits
         self.lexicon = lexicon or Lexicon.from_catalogue(config=config.vocab,
@@ -144,6 +147,21 @@ class StreamService:
         self._examples: Dict[str, Dict[str, Any]] = {}
         self._example_sets: Dict[str, List[str]] = {}
         self._baseline: Dict[str, Dict[str, Any]] = {}
+
+    # -- teaching ---------------------------------------------------------------------------
+
+    def feedback(self, words: Sequence[str], product_id: str) -> Dict[str, Any]:
+        """The shopper accepted `product_id` for this request: remember what the words we could
+        not place probably meant. The agent reads the result the next time it starts."""
+        words = self._check_words(words)
+        product = self.directory.get(product_id)
+        if not product:
+            raise ServiceError(404, "not_found", "no such product")
+        store = LearnedStore(self.learned_path)
+        seen = learn_from_request(words, self.lexicon, store, product)
+        if seen:
+            store.save()
+        return {"learned": [{"word": w, "slot": s, "value": v} for w, s, v in seen]}
 
     # -- information ------------------------------------------------------------------------
 
