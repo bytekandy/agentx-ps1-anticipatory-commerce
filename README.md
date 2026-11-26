@@ -28,7 +28,7 @@ docs/        plan, analysis, architecture note, abstract
 
 ## Run
 
-Requires Python 3.9 or later. Nothing to install.
+Requires Python 3.14 (the version it was built and tested on). Nothing to install.
 
 ```
 cd backend

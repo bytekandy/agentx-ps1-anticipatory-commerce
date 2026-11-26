@@ -20,7 +20,7 @@ Three patterns, each needing an unexplained word:
             before "brand", "ka", "wala", or any capitalised word in the middle of a sentence
             ("I want Nike shoes"). Not after "for", "on", "this" ("for Diwali", "by Friday").
   size      after a size cue ("size", "UK", "waist") when it reads as a number that is no
-            catalogue size ("size 14") or as an extra-large or extra-small size ("size 4XL");
+            catalogue size ("size 14") as an extra-large or extra-small size ("size 4XL") or as a half size ("size 10.5");
             also a size that exists but not for the category ("size 32 sandals", "size M cap").
   colour, style or brand
             a word right before a category, colour or brand word that nothing explains
@@ -41,6 +41,7 @@ from .slots import Reading
 from .words import EnglishWords, english_words
 
 _EXTRA_SIZE = re.compile(r"^(\d*x+[sl]|\d+x[sl])$")        # xxxl, xxs, 4xl, 3xs
+_HALF_SIZE = re.compile(r"^\d{1,2}\.\d$")                # 10.5, 7.5: the shop has no half sizes
 _COLOUR_WORDS = frozenset({"colour", "color", "colours", "colors", "rang"})
 
 
@@ -128,6 +129,6 @@ def find_unresolved(reading: Reading, lexicon: Lexicon, config: Config = DEFAULT
             reading_n = read_number(tokens, i)
             if reading_n and reading_n.value < 100 and lexicon.size_from_number(reading_n.value) is None:
                 out.append(Unresolved("size", token.text, i, i + 1, "no such size in the shop"))
-            elif _EXTRA_SIZE.match(token.text):
+            elif _EXTRA_SIZE.match(token.text) or _HALF_SIZE.match(token.text):
                 out.append(Unresolved("size", token.text, i, i + 1, "no such size in the shop"))
     return out

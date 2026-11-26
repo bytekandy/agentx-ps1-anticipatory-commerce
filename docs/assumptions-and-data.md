@@ -50,7 +50,7 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
 ### About the environment
 - The harness imports `agent.py` from its folder with the `anticipatory/` package next to it, and
   `catalogue.csv` where the kit puts it. The package reads its own data files relative to itself.
-- Python 3.8 or later (static analysis says 3.8 is the minimum; only 3.14 was executed here).
+- Python 3.14, the only version run, tested and supported (decision: the team uses the version installed on its machine).
 - No network, no writes, no randomness: same input, same output (5,000 of 5,000 requests identical
   on a replay). The optional stream server (`python -m server`) is a demo interface that
   is not part of what the harness runs. It uses third-party packages (`backend/requirements-server.txt`,
@@ -126,7 +126,7 @@ Everything ran on a fresh clone of the PR branch, except where noted.
 - **Hostile input and long requests:** Devanagari, emoji, control characters, a 20,000-letter word,
   a 400-digit number, SQL-looking text, blank words; 20,000 words in 235 ms (the cost per word was
   quadratic until Stage 9, now capped).
-- **Python versions:** static analysis (vermin) puts the shipped package at Python 3.8 or later.
+- **Python version:** everything ran on Python 3.14, which is the supported version. Earlier versions are not claimed.
 
 ### Bugs this review found, now fixed
 1. "price cap 2000" read "cap" as the category caps. Fix: the cues "price cap", "budget cap" and
@@ -135,25 +135,25 @@ Everything ran on a fresh clone of the PR branch, except where noted.
    it into two tokens.
 Both have tests; dev and `dev_extra` scores are unchanged by them.
 
-## 6. Known limitations
+## 6. Known limitations (after Stage 14)
+Resolved or decided; the open ones come first.
+
 - **Synonyms outside the seed list are not understood** ("sliders", "lowers"). The agent notices a
   word it cannot place and does not commit early on it; the final answer is the best match
   without it. Planned: a soft lexicon from word vectors after Round 1.
-- **Punctuation inside a phrase** (fixed in Stage 13): a known phrase now survives a comma inside it
-  ("navy, blue", "t, shirt", "extra, large"). A comma between a cue and its number ("size, nine",
-  "one thousand, five hundred") is still read as a pause, so those values are read late; commas
-  after every third word changed 13 of 383 final answers (34 before), with 0 wrong commits (1 before).
-- **A typo in a cue word** (fixed in Stage 13): size, price and correction cue words are now
-  spell-corrected too ("unedr 2000", "sorey I meant"), and "saiz"/"siz" are listed as size cues.
-  Cue typos on 287 requests: 0 changed answers and 0 wrong commits (17 and 5 before).
-- **Half sizes** ("10.5") do not exist in the catalogue; the final answer is a near product.
-- **A shopper who contradicts themselves without a marker** gets the last value at lower
-  confidence, and no early commit on it.
+- **A comma between a cue and its number** ("size, nine") is still read as a pause (Stage 13 fixed commas inside phrases and typos in cue words).
+- **Half sizes** ("10.5"): fixed in Stage 14. The shop has none, so the size is reported as
+  unresolved: no early commit, and the final answer is the best match without it.
+- **A shopper who contradicts themselves without a marker** ("size 9 size 10", "red black"):
+  decision, not a bug. The last value wins at lower confidence (0.6) and the agent does not commit
+  early on it. There is no better reading without a marker.
 - **Long-delayed corrections** (an old slot corrected long after, with nothing in front of it) are
   the one case no signal predicts. They are why the agent pays about 3 earliness points for
-  safety, and why 0.25% of synthetic requests still end in a wrong early commit.
-- **Earliness is modest:** 6.4% of a request on dev, against 16.3% possible. That is a decision:
-  every faster setting tried added wrong commits (Stage 8).
+  safety, and why 0.25% of synthetic requests still end in a wrong early commit. Inherent, accepted.
+- **Earliness is modest:** 6.4% of a request on dev, against 16.3% possible. A decision: every
+  faster setting tried added wrong commits (Stage 8). Accepted.
 - **Unresolved-constraint false flags** cost earliness (the agent waits) but never cause a wrong
-  commit. None occurred on dev or on 3,000 clean synthetic requests.
-- Only Python 3.14 was executed in this review; 3.8 to 3.13 are covered by static analysis only.
+  commit. None occurred on dev or on 3,000 clean synthetic requests. Accepted.
+- **Python:** only 3.14 is supported (decision above).
+- **Web page and server** (Devanagari words, Python 3.11+ for the server, no TLS): out of scope.
+  The page is an optional extra and is not evaluated.

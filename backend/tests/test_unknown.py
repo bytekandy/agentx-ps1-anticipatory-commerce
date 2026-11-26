@@ -68,6 +68,11 @@ class UnknownBrandTest(UnknownTestCase):
 
 
 class UnknownSizeTest(UnknownTestCase):
+    def test_a_half_size_is_flagged(self):
+        self.assertFlagged("black shoes size 10.5", "size", "10.5")
+        self.assertFlagged("black shoes 7.5 UK", "size", "7.5")
+        self.assertClean("black shoes size 9 under 1.5k")
+
     def test_a_number_that_is_no_size(self):
         self.assertFlagged("black sandals size 14", "size", "14")
         self.assertFlagged("blue jeans waist 40", "size", "40")
