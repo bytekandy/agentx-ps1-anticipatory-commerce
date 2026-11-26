@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local run output (the submission copy lives in backend/outputs/)
+backend/results*.jsonl
+*.log
+
+# Frontend (added in a later stage)
+node_modules/
+dist/
+build/
+.env
+.env.*
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
