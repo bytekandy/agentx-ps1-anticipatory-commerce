@@ -6,6 +6,7 @@ Standard library only. Modules, from the bottom up:
     tokens        word normalisation (case, punctuation, rupee forms)
     numbers       price and size numbers: digits, "3.5k", English and Hindi number words
     lexicon       vocabulary built from the catalogue, plus synonyms and cue words
+    spelling      noisy-channel spelling correction of the words that name a product
     slots         slot mentions (category, colour, brand, size, prices) from the words so far
     state         filter state: one belief per slot, revisions, pending corrections and numbers
     catalog_port  the only door to the catalogue (counted searches), plus a test stand-in
