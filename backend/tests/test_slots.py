@@ -46,6 +46,23 @@ class PhraseSlotTest(SlotsTestCase):
         self.assertEqual(m.kind, "fuzzy")
         self.assertLess(m.confidence, 0.7)
 
+    def test_misspelt_words_of_every_slot_are_read_at_low_confidence(self):
+        for text, slot, value in (("blak cap", "colour", "black"),
+                                  ("snekers size 9", "category", "sneakers"),
+                                  ("runing shoes", "category", "running shoes"),
+                                  ("navy hoodiee", "category", "hoodies")):
+            with self.subTest(text=text):
+                m = self.assertSlot(text, slot, value)
+                self.assertEqual(m.kind, "fuzzy")
+                self.assertLess(m.confidence, 0.7)
+
+    def test_a_corrected_phrase_keeps_its_whole_span(self):
+        m = self.one("get me runing shoes please", "category")
+        self.assertEqual((m.start, m.end), (2, 4))
+
+    def test_correct_words_are_not_marked_fuzzy(self):
+        self.assertEqual({m.kind for m in self.read("black sneakers from Pacevo")} & {"fuzzy"}, set())
+
     def test_ordinary_words_make_no_mentions(self):
         self.assertEqual(self.read("hi do you have any one more thing please"), [])
         self.assertEqual(self.read("mere liye ek aur baat kya aapke paas hai"), [])

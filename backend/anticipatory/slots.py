@@ -10,7 +10,8 @@ Slots: category, colour, brand, size, max_price, min_price.
 How a word becomes a mention
   * Phrases (category, colour, brand, letter or word sizes) come from `Lexicon.lookup`. A
     letter size right beside a size cue ("size M", "M size") is trusted more than a bare "M".
-  * A misspelt brand is caught by `Lexicon.lookup_fuzzy`, at lower confidence.
+  * A misspelt word is corrected first (`spelling.py`); a mention that rests on a corrected
+    word has `kind="fuzzy"` and lower confidence.
   * Numbers come from `read_number`. A number is a *size* if a size cue sits beside it
     ("size 9", "UK 10", "32 waist"), a *price* if a price cue does ("under 1500", "1500 tak"),
     and a cue before the number beats a cue after it. A number with no cue at all is a price
@@ -76,11 +77,16 @@ def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
     that was only waiting for a possible next word ("under two thousand") is settled.
     """
     mentions: List[SlotMention] = []
+    tokens, corrected = lexicon.corrector.correct_tokens(tokens)
     i = 0
     while i < len(tokens):
         phrase = lexicon.lookup(tokens, i)
         if phrase:
-            mentions.append(_phrase_mention(tokens, i, phrase, config))
+            mention = _phrase_mention(tokens, i, phrase, config)
+            if any(j in corrected for j in range(mention.start, mention.end)):
+                mention = replace(mention, kind="fuzzy",
+                                  confidence=min(mention.confidence, config.vocab.confidence_fuzzy))
+            mentions.append(mention)
             i += phrase.length
             continue
         reading = read_number(tokens, i)
@@ -92,10 +98,6 @@ def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
                 mentions.append(mention)
             i += reading.length
             continue
-        fuzzy = lexicon.lookup_fuzzy(tokens[i])
-        if fuzzy:
-            mentions.append(SlotMention(fuzzy.slot, fuzzy.value, i, i + 1, fuzzy.confidence,
-                                        True, fuzzy.kind, "phrase"))
         i += 1
     return mentions
 

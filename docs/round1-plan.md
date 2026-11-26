@@ -183,10 +183,14 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/scripts/make_training_data.py`, `backend/scripts/train_risk.py`, `backend/anticipatory/data/risk_model.json`, `backend/agent_learned.py`, `backend/agent_heuristic.py`, `backend/tests/test_risk.py`, `backend/tests/test_training.py`; extends `risk.py` (new `RiskInput` fields, `LearnedRisk`, `HybridRisk`); adds a learned-risk block to `config.py`; changes `agent.py` to use the hybrid; small additive changes to `slots.py` (two reader fixes and `cue_awaiting_number`) and `state.py` (`cue_pending`).
 - **Exit (met):** calibration error reported on dev (held out); wrong commits at or below the rules-only policy (0 vs 0 on dev, equal rate on fresh synthetic requests); score above the rules-only policy (43.4 vs 41.5); per-tag table in the PR.
 
-### Stage 7 - Noisy-channel spelling (hybrid) - `stage-7/spelling` - todo
-- `spelling.py`: candidates within one edit (two for long words) of a known word, scored by an edit model (keyboard-adjacent substitutions and transpositions cheaper) times a word prior from the catalogue, with guard words so common English words are never "corrected" (technique D). Extends the brand-only fuzzy match to every slot at lower confidence.
-- **Owns:** `backend/anticipatory/spelling.py`, `backend/tests/test_spelling.py`; small additive hook in `lexicon.py`; a spelling block in `config.py`.
-- **Exit:** at least 90 percent of single-typo variants of catalogue values recovered in a synthetic test; zero new stray matches on dev; wrong commits not higher than Stage 6.
+### Stage 7 - Noisy-channel spelling (hybrid) - `stage-7/spelling` - done (on merge)
+- `spelling.py`: of all known words, which one most probably produced the typed word (technique D). Score = log prior (catalogue row count of the word) minus a weighted edit cost (neighbouring key 0.5, swap 0.6, doubled letter 0.6, other edit 1.0). Guards: known words and ordinary or unsold clothing words are never touched (`COMMON_WORDS`, plus every word in the catalogue's own titles and descriptions); three letters or fewer are never corrected; the first letter must match; short words allow only the cheapest slip; a runner-up within 0.5 of the best means "unsure" and nothing changes. Corrects every product word (category, colour, brand, size words), not only brands; a mention resting on a corrected word has `kind="fuzzy"` and confidence 0.60.
+- Hybrid risk keeps the rules' caution for any state resting on a value read below confidence 0.7 (a corrected word, an unmarked revision).
+- The generator can inject typos (`typo_rate`) for robustness checks; training leaves it at 0 because dev has none.
+- Replaced the earlier brand-only fuzzy match (`Lexicon.lookup_fuzzy`) and its config fields.
+- **Owns:** `backend/anticipatory/spelling.py`, `backend/tests/test_spelling.py`; adds `SpellingConfig`; `Lexicon` gains `word_weights`, `catalogue_words` and the corrector; `slots.py` corrects tokens before lookup.
+- **Results:** single-slip recovery 96% (swap, neighbouring key, doubled letter), 77% for a dropped letter (the misses are four-letter words that become three letters, which are never corrected by design); no false correction on any dev word or generator phrase; dev score unchanged at 43.4 with 0 wrong commits. Whole pipeline on typed requests, 15% of product phrases with a typo: accuracy 0.998 with spelling versus 0.845 without; score 43.0 versus 36.7.
+- **Exit (met):** at least 90 percent of single-slip variants recovered; zero new stray matches on dev; wrong commits not higher than Stage 6.
 
 ### Stage 8 - Robustness and tuning - `stage-8/robustness` - todo
 - Late constraints, Hindi-English handling, correction edge cases; tune `config.py` values.
@@ -224,6 +228,7 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - Voice demo through browser speech-to-text feeding words to the backend.
 - Wasted-search limit exposed as a setting in the UI.
 - Fresh hidden-set robustness; latency and cost numbers; live jury test practice; 10-minute pitch.
+- **Soft lexicon (user decision 2026-11-26, after the Stage 6 audit of hand-written words):** the synonym tables in `lexicon.py` (about 90 phrases, part read off dev, part guessed) are an honest seed list, not a solution. After Round 1 replace or back them with pretrained word vectors: an unknown word ("trainers") maps to its nearest category by meaning, as a lower-trust fallback behind the exact and seed matches (option C: keep the seed list as the high-trust layer). Needs an external vector file (a trimmed GloVe or fastText subset shipped as small JSON), so check size and licence first.
 - Hybrid extras if not done earlier: a probability over candidate products (technique C) and a soft lexicon from pretrained word vectors (technique E).
 - LLM reader only if the user decides to add one.
 - This stage may split into several branches once the finals details are known.
