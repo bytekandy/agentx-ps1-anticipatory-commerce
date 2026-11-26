@@ -1,7 +1,6 @@
 import unittest
 
 from anticipatory.catalog_port import InMemoryCatalog
-from anticipatory.config import DEFAULT_CONFIG
 from anticipatory.lexicon import Lexicon, load_rows
 from anticipatory.policy import CommitPolicy, blocked_reason, break_even_risk, search_filters
 from anticipatory.risk import HeuristicRisk, RiskInput

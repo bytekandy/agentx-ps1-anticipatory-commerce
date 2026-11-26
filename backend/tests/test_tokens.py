@@ -1,6 +1,26 @@
 import unittest
 
-from anticipatory.tokens import make_token, normalize, tokenize_text
+from anticipatory.tokens import make_token, make_tokens, normalize, tokenize, tokenize_text
+
+
+class GluedSizeTest(unittest.TestCase):
+    def test_a_size_cue_glued_to_its_number_becomes_two_tokens(self):
+        for raw, cue, number in (("size9", "size", "9"), ("UK10", "uk", "10"), ("sz10", "size", "10"),
+                                 ("w32", "waist", "32"), ("Size9,", "size", "9")):
+            with self.subTest(raw=raw):
+                tokens = make_tokens(raw)
+                self.assertEqual([t.text for t in tokens], [cue, number])
+                self.assertEqual(tokens[1].clause_end, raw.endswith(","))
+                self.assertFalse(tokens[0].clause_end)
+
+    def test_other_words_stay_one_token(self):
+        for raw in ("size", "9", "uk", "sizes", "w", "w5x", "uk100", "wallet2", "size9x"):
+            with self.subTest(raw=raw):
+                self.assertEqual(len(make_tokens(raw)), 1)
+
+    def test_tokenize_expands_them_in_place(self):
+        self.assertEqual([t.text for t in tokenize(["black", "UK10", "shoes"])],
+                         ["black", "uk", "10", "shoes"])
 
 
 class NormalizeTest(unittest.TestCase):

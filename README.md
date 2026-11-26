@@ -2,11 +2,11 @@
 
 Entry for **AgentX: The Agentic Commerce Challenge** (Techfest 2026-27, IIT Bombay, by Rezolve.ai), Problem Statement 1.
 
-A shopping request arrives one word at a time, for example "black running shoes, size nine, under two thousand...". The agent predicts the shopper's filters (category, colour, size, budget, brand) from the words so far, searches early, and commits to a product as soon as it is safe to, without ever committing to a wrong one. Text only. No language model is used.
+A shopping request arrives one word at a time, for example "black running shoes, size nine, under two thousand...". The agent predicts the shopper's filters (category, colour, size, budget, brand) from the words so far, searches early, and commits to a product as soon as it is safe to, aiming never to commit to a wrong one (none on the public dev set; about 0.25% of 20,000 synthetic requests). Text only. No large language model is used; the only learned part is a 22-weight logistic regression for the commit risk.
 
 ## Status
 
-Work in progress; the agent is being built stage by stage (see `docs/round1-plan.md`). The first end-to-end agent exists: on the dev set it scores 42.1 against the kit baseline's 20.0, with every answer right and no wrong commit.
+The backend is complete for Round 1; the stream interface and the base UI come next (see `docs/round1-plan.md`). On the public dev set the agent scores **43.5** against the kit baseline's 20.0, with every final answer right and no wrong early commit. On 87 extra hand-written requests with phrasing the dev set does not contain (`backend/data/dev_extra.jsonl`) it scores 40.5 (accuracy 0.989) against the baseline's 31.3 (0.793). It uses about 1.5 ms of CPU per request, no model API, and only the Python standard library. The full numbers, per-tag tables and the cost figures are in [`backend/outputs/report.md`](backend/outputs/report.md), and the per-request output on the dev set, as the organisers ask for, is `backend/outputs/results.jsonl`.
 
 ## Repository layout
 
@@ -14,6 +14,11 @@ This is a monorepo.
 
 ```
 backend/     Python (standard library only): the agent and the Rezolve starter kit
+  anticipatory/   the agent package (see below)
+  data/           our own extra test requests (dev_extra.jsonl)
+  outputs/        results on dev and dev_extra, and the generated report
+  scripts/        analysis, training, report and test-data builders
+  tests/          unit and scenario tests
 frontend/    base UI (added in a later stage)
 docs/        plan, analysis, architecture note, abstract
 ```
@@ -39,7 +44,13 @@ python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference
 python evaluate.py --agent agent_learned.py     # learned risk model only
 ```
 
-Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`.
+Regenerate the committed outputs (results on dev and dev_extra, and the report with per-tag tables and the cost and speed numbers; about 15 seconds; scoring is the organisers' own `evaluate.py`, imported unchanged):
+
+```
+python scripts/report.py
+```
+
+Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`. Rebuild the extra test requests: `python scripts/build_dev_extra.py`.
 
 Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`):
 
@@ -47,7 +58,15 @@ Run the unit tests (also from `backend/`; works from the repo root too with `pyt
 python -m unittest discover -s tests -t .
 ```
 
-The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms), `spelling.py` (noisy-channel correction of typed product words), and slot extraction: `slots.py` turns the words so far into slot mentions with confidences (size or price decided by cue words such as "size", "UK", "under", "tak"). Check it against dev with `python scripts/slot_accuracy.py` (run from `backend/`). `state.py` keeps the running reading of the request: one belief per slot, revisions when the shopper corrects themself ("black, oops, navy"), and warning flags for the decision policy. Replay dev word by word with `python scripts/state_replay.py`. On top of that sit the decision layer (`risk.py`, `policy.py`, `catalog_port.py`, `trace.py`) and the orchestrator `agent.py`: the agent searches only when a search could lead to a commit, and commits only to a single matching product when the estimated risk of being wrong is below the break-even set by the score formula.
+The agent code lives in the package `backend/anticipatory/` (standard library only). Layers, from the words up:
+
+- **Reading the words:** `tokens.py` (normalise words), `numbers.py` (prices and sizes as digits, "3.5k" or English and Hindi number words), `lexicon.py` (categories, colours, brands and sizes from the catalogue, plus a seed synonym list), `words.py` (general English word frequencies), `spelling.py` (noisy-channel correction of typed product words), `slots.py` (slot mentions with confidences: size or price decided by cue words such as "size", "UK", "under", "tak").
+- **Knowing what the shopper wants:** `state.py` (the running reading: one belief per slot, corrections such as "black, oops, navy", warning flags), `unknown.py` (constraints the shop cannot answer: an unknown brand, size, colour or style).
+- **Deciding:** `risk.py` (how likely a commit is to be wrong: hand-coded rules and a learned logistic regression, combined), `policy.py` (when to search and when to commit, from the break-even of the score formula), `catalog_port.py` (the only door to the catalogue), `trace.py` (one record per word), `agent.py` (the orchestrator).
+
+Check the reader against dev with `python scripts/slot_accuracy.py` and `python scripts/state_replay.py` (from `backend/`).
+
+For the data sources, every assumption, what dev influenced, and the verification behind these numbers, read [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md).
 
 ## Known limits
 

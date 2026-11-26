@@ -107,6 +107,9 @@ def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAU
     corrected_tokens = tuple(tokens)
     i = 0
     while i < len(tokens):
+        if _ends_multiword_price_cue(tokens, i):         # "price cap": the cue claims "cap"
+            i += 1
+            continue
         phrase = lexicon.lookup(tokens, i)
         if phrase:
             mention = _phrase_mention(tokens, i, phrase, config)
@@ -318,6 +321,15 @@ def _inside_cue(tokens: Sequence[Token]) -> bool:
         for n in range(1, len(cue)):
             if texts[-n:] == list(cue[:n]):
                 return True
+    return False
+
+
+def _ends_multiword_price_cue(tokens: Sequence[Token], i: int) -> bool:
+    """tokens[i] is the last word of a two-or-more word price cue ("price cap", "not more than")."""
+    for cue, _ in _CUES_BY_LAST_WORD.get(tokens[i].text, ()):
+        n = len(cue)
+        if n > 1 and i + 1 >= n and tuple(t.text for t in tokens[i + 1 - n:i + 1]) == cue:
+            return True
     return False
 
 

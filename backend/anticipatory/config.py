@@ -66,6 +66,12 @@ class StateConfig:
     # mention as a late constraint.
     late_window: int = 3
 
+    # Reading the whole request again after every word is cheap for real requests (6 to 25
+    # words) but grows with the square of the length. Past this many words the state stops
+    # updating per word: the agent cannot commit any more (it just waits), and `finish()` still
+    # reads the whole request once.
+    max_live_words: int = 200
+
     # The overall confidence reported to the evaluator is scaled by this while the reading is
     # unsettled (a correction is pending or a number may still grow).
     unsettled_factor: float = 0.5
