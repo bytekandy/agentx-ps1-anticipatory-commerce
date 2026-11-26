@@ -15,10 +15,10 @@ Hard deadline for Round 1: **30 Nov 2026, 11:59 PM IST**. The stages below have 
 | Feasibility, cost and scale | 15 | Abstract: impact, cost estimate | `docs/abstract.md`, latency and search numbers |
 | Presentation and Q&A | 10 | not scored in Round 1 (total rescaled 90 to 100) | finals only |
 
-**Provisional targets (our own, revisit after Stage 1):**
-- Hard gates: wrong commits = 0 on dev; accuracy at or above the baseline (0.527).
-- Score: well above the baseline's 20.0 on dev. The ceiling is about 50 (oracle earliness 16.3%), so aim for 35 or more.
-- Efficiency: about 3 searches per request or fewer; well under 5 ms per word.
+**Targets (our own; revised after Stage 1, see `docs/dev-analysis.md`):**
+- Hard gates: wrong commits = 0 on dev (each exception documented); accuracy at or above the baseline (0.527).
+- Score on dev: floor 40.0 (perfect reading with no early commit), goal 43 to 46, ceiling about 50. Below 40 means the early-commit logic is losing points.
+- Efficiency: about 1.5 searches per request or fewer (one extra search costs 2 points); well under 5 ms per word.
 
 ---
 
@@ -122,7 +122,7 @@ finish(): re-read the full request -> final search -> return product_id
 - **Slots:** category, colour, brand, size, max_price (plus min_price if seen). Each slot holds a value, a confidence, and a revision history.
 - **Revisions:** markers like "oops", "no wait", "sorry I meant", "actually" replace the earlier slot value and start a cooldown before that slot is trusted again.
 - **Commit rule (user confirmed):** commit once the remaining candidates cannot be separated by anything the shopper might still add. Candidate rows differ by size, so sized categories normally wait for the size; unsized categories (backpacks, caps, headphones, watches, wallets) can commit earlier.
-- **Key unknown for Stage 6:** how likely a late budget or other constraint is to invalidate a commit. Estimate it from dev tags and stated-slot statistics, then set the threshold in `config.py`.
+- **Key risk for Stage 6:** corrections, not late constraints. Stage 1 showed a unique match built from correctly read values can only be overturned by a correction (or a misread); late constraints never invalidate it. Measure per-slot correction risk and clause-boundary signals, then set the thresholds in `config.py`.
 - **Confidence:** exact catalogue match high; synonym medium; number-word parse and ambiguous tokens (for example a bare "M") lower, raised by context.
 - **Final check:** `finish()` ignores earlier guesses, reads the whole request, searches once more, and returns that result.
 
@@ -139,7 +139,7 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `docs/round1-plan.md`, `README.md`, `.gitignore`, `.editorconfig`, `.github/`.
 - **Exit:** PR merged; `main` is on GitHub.
 
-### Stage 1 - Baseline and data analysis - `stage-1/dev-analysis` - todo
+### Stage 1 - Baseline and data analysis - `stage-1/dev-analysis` - done (on merge)
 - Run the baseline once and confirm 20.0 / 0.527.
 - `scripts/analyze_dev.py`: per-tag stats, how often each slot arrives late, where the oracle `earliest` falls, inventory of synonyms, number phrasings, correction markers and Hindi-English words.
 - Mine dev for rules that generalise, not just exact strings; the hidden set has unseen wording.
