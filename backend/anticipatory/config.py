@@ -47,9 +47,39 @@ class SlotConfig:
 
 
 @dataclass(frozen=True)
+class StateConfig:
+    """Filter state and corrections (Stage 4)."""
+
+    # A mention below this confidence is a weak guess and never becomes part of the reading.
+    min_belief_confidence: float = 0.5
+
+    # After a correction marker ("oops", "make that") the replacement normally follows within
+    # 1 to 3 words in dev. For this many words the state reports `correction_pending`. The same
+    # window decides whether a revision counts as announced by a marker.
+    correction_window: int = 6
+
+    # A bare number straight after a marker, for a slot that already has a value ("size eight,
+    # actually six"), is read as a restatement and trusted this much.
+    restate_confidence: float = 0.85
+
+    # A new value for a slot that already had one, with no marker to explain it, still wins
+    # (the last word is usually right) but is trusted less.
+    unmarked_revision_confidence: float = 0.60
+
+    # An afterthought word ("and", "also", "oh", "aur") this close before a mention marks the
+    # mention as a late constraint.
+    late_window: int = 3
+
+    # The overall confidence reported to the evaluator is scaled by this while the reading is
+    # unsettled (a correction is pending or a number may still grow).
+    unsettled_factor: float = 0.5
+
+
+@dataclass(frozen=True)
 class Config:
     vocab: VocabConfig = field(default_factory=VocabConfig)
     slots: SlotConfig = field(default_factory=SlotConfig)
+    state: StateConfig = field(default_factory=StateConfig)
 
 
 DEFAULT_CONFIG = Config()

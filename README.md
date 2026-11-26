@@ -38,7 +38,7 @@ Run the unit tests (also from `backend/`; works from the repo root too with `pyt
 python -m unittest discover -s tests -t .
 ```
 
-The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms), and slot extraction: `slots.py` turns the words so far into slot mentions with confidences (size or price decided by cue words such as "size", "UK", "under", "tak"). Check it against dev with `python scripts/slot_accuracy.py` (run from `backend/`).
+The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms), and slot extraction: `slots.py` turns the words so far into slot mentions with confidences (size or price decided by cue words such as "size", "UK", "under", "tak"). Check it against dev with `python scripts/slot_accuracy.py` (run from `backend/`). `state.py` keeps the running reading of the request: one belief per slot, revisions when the shopper corrects themself ("black, oops, navy"), and warning flags for the decision policy. Replay dev word by word with `python scripts/state_replay.py`.
 
 ## Working on this repo
 
