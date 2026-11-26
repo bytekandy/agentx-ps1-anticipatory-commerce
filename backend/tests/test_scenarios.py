@@ -74,6 +74,16 @@ class PhrasingTest(ScenarioTestCase):
         self.assertEqual(commits, [])                      # the price does not pick one
         self.assertIn(final, (LOOMSY_NAVY_7_CHEAP, LOOMSY_NAVY_7_DEAR))
 
+    def test_price_cap_is_a_budget_not_a_cap(self):
+        self.assertAnswers("hello could you look up navy Urbanyx hoodies for me, size M, price cap 3000 "
+                           "thank you so much", HOODIE_M)
+
+    def test_glued_sizes(self):
+        for glued in ("UK10", "size10", "sz10", "uk10,"):
+            with self.subTest(glued=glued):
+                self.assertAnswers(f"beige Loomsy sneakers {glued} under 3000", LOOMSY_BEIGE_10)
+        self.assertAnswers("blue Northweft jeans w32 under 2000", JEANS_BLUE_32)
+
     def test_rupee_formats(self):
         for price in ("Rs. 2,899", "₹2899", "2899/-", "Rs.2899", "2.9k"):
             with self.subTest(price=price):

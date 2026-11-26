@@ -32,7 +32,7 @@ from .config import DEFAULT_CONFIG, Config
 from .lexicon import CORRECTION_WORDS, LATE_WORDS, PRICE_CUES, SIZE_CUES, Lexicon
 from .slots import SlotMention, cue_awaiting_number, read_words, size_fits_category
 from .unknown import Unresolved, find_unresolved
-from .tokens import Token, make_token
+from .tokens import Token, make_tokens
 
 # Two-word markers that the single-word list cannot express ("make that XXL", "make it Kudova").
 # "make sure" is not a marker, which is why "make" alone is not in `CORRECTION_WORDS`.
@@ -291,7 +291,7 @@ class FilterState:
         Past `max_live_words` the snapshot is no longer refreshed (see `StateConfig`): a request
         that long gets no early commit, but `finish()` still reads all of it.
         """
-        self.tokens.append(make_token(word))
+        self.tokens.extend(make_tokens(word))
         if len(self.tokens) <= self.config.state.max_live_words:
             self.snapshot = build_snapshot(self.tokens, self.lexicon, self.config)
         return self.snapshot
