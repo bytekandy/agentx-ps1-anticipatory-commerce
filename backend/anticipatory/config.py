@@ -76,10 +76,48 @@ class StateConfig:
 
 
 @dataclass(frozen=True)
+class PolicyConfig:
+    """Search scheduling and the commit rule (Stage 5)."""
+
+    # Candidate searches ask for this many results. Cost is per call, not per result, and a
+    # long list lets the risk model see how many products are still in play.
+    candidate_k: int = 50
+    final_k: int = 10                 # the verification search in `finish()`
+
+    # A belief weaker than this is not used as a search filter.
+    min_search_confidence: float = 0.5
+
+    # The commit rule is an expected-value comparison built from the score formula: a commit is
+    # worth it when P(wrong) is below `break_even_risk(words_saved)`. These are the formula's
+    # numbers: 0.6 points for a whole request of earliness, 13.3 words on average, and the
+    # share of earliness a wrong commit typically forfeits on top of its -1.0.
+    earliness_weight: float = 0.6
+    avg_request_words: float = 13.3
+    forfeit_share: float = 0.2
+    words_saved_assumed: int = 1
+
+
+@dataclass(frozen=True)
+class RiskConfig:
+    """The hand-coded risk estimate used until a learned model replaces it (Stage 5)."""
+
+    base_risk: float = 0.01           # even a perfect-looking unique match can be overturned
+    confidence_weight: float = 0.2    # added risk per unit of missing confidence
+    hold_words: int = 1               # a correction usually follows its value within 1 to 3 words
+    fresh_penalty: float = 0.5        # added risk while the last mention is younger than that
+    # A pause (comma or period) right after the last word is where corrections start: in dev
+    # every correction after a pause follows a value that ended with one.
+    clause_end_penalty: float = 0.5
+    unsettled_risk: float = 1.0       # a correction is pending or a number is still growing
+
+
+@dataclass(frozen=True)
 class Config:
     vocab: VocabConfig = field(default_factory=VocabConfig)
     slots: SlotConfig = field(default_factory=SlotConfig)
     state: StateConfig = field(default_factory=StateConfig)
+    policy: PolicyConfig = field(default_factory=PolicyConfig)
+    risk: RiskConfig = field(default_factory=RiskConfig)
 
 
 DEFAULT_CONFIG = Config()
