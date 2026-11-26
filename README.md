@@ -34,6 +34,7 @@ Score our agent on the dev set (`agent.py` is the hybrid: hand-coded rules for f
 
 ```
 python evaluate.py --agent agent.py
+python evaluate.py --agent agent.py --data data/dev_extra.jsonl   # 87 extra hand-written requests (unseen phrasing)
 python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference)
 python evaluate.py --agent agent_learned.py     # learned risk model only
 ```
