@@ -29,7 +29,7 @@ from dataclasses import dataclass, replace
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .config import DEFAULT_CONFIG, Config
-from .lexicon import CORRECTION_WORDS, LATE_WORDS, PRICE_CUES, Lexicon
+from .lexicon import CORRECTION_WORDS, LATE_WORDS, PRICE_CUES, SIZE_CUES, Lexicon
 from .slots import SlotMention, cue_awaiting_number, read_words, size_fits_category
 from .unknown import Unresolved, find_unresolved
 from .tokens import Token, make_token
@@ -194,7 +194,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         markers=tuple(markers),
         pending_slots=tuple(pending),
         correction_pending=_correction_pending(markers, heard, words, cfg),
-        cue_pending=_something_follows(tokens),
+        cue_pending=_something_follows(tokens, mentions),
         unresolved=tuple(sorted(unresolved, key=lambda u: u.start)),
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
@@ -242,10 +242,16 @@ def _fold(slot: str, events: Sequence[_Event], cfg) -> Optional[SlotBelief]:
     return belief
 
 
-def _something_follows(tokens: Sequence[Token]) -> bool:
+def _something_follows(tokens: Sequence[Token], mentions: Sequence[SlotMention] = ()) -> bool:
     """The words end on a word that announces more: a size or price cue awaiting its number,
     or "make" (which may be about to become "make that"). "make sure" costs one word of wait.
+
+    A cue that closes a size already heard ("M size", "XXL size", "size 8 UK") announces
+    nothing: no number is coming.
     """
+    if tokens and tokens[-1].text in SIZE_CUES and any(
+            m.slot == "size" and m.end == len(tokens) - 1 for m in mentions):
+        return bool(tokens[-1].text in MARKER_STARTERS)
     return cue_awaiting_number(tokens) or (bool(tokens) and tokens[-1].text in MARKER_STARTERS)
 
 

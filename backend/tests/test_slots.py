@@ -56,6 +56,14 @@ class PhraseSlotTest(SlotsTestCase):
                 self.assertEqual(m.kind, "fuzzy")
                 self.assertLess(m.confidence, 0.7)
 
+    def test_a_possessive_of_a_known_word_is_read_as_the_word(self):
+        self.assertSlot("black Pacevo's shoes", "brand", "Pacevo")
+        self.assertSlot("black Pacevo\u2019s shoes", "brand", "Pacevo")
+        self.assertSlot("the black's sneakers", "colour", "black")
+
+    def test_other_possessives_and_contractions_are_left_alone(self):
+        self.assertEqual([m for m in self.read("it's my brother's shoes") if m.slot == "brand"], [])
+
     def test_a_corrected_phrase_keeps_its_whole_span(self):
         m = self.one("get me runing shoes please", "category")
         self.assertEqual((m.start, m.end), (2, 4))

@@ -75,6 +75,16 @@ class Reading:
     mentions: Tuple["SlotMention", ...]
 
 
+def _drop_possessives(tokens: Sequence[Token], lexicon: Lexicon) -> List[Token]:
+    """"Pacevo's black shoes": drop the 's when what is left is a word the lexicon knows.
+    ("it's" stays as it is: "it" names nothing.)"""
+    out = []
+    for token in tokens:
+        stem = token.text[:-2] if token.text.endswith(("'s", "\u2019s")) else None
+        out.append(replace(token, text=stem) if stem and stem in lexicon.known_words else token)
+    return out
+
+
 def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
                      config: Config = DEFAULT_CONFIG, final: bool = False) -> List[SlotMention]:
     """All slot mentions in the words so far; see `read_words` for the full reading."""
@@ -92,6 +102,7 @@ def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAU
     that was only waiting for a possible next word ("under two thousand") is settled.
     """
     mentions: List[SlotMention] = []
+    tokens = _drop_possessives(tokens, lexicon)
     tokens, corrected = lexicon.corrector.correct_tokens(tokens)
     corrected_tokens = tuple(tokens)
     i = 0
