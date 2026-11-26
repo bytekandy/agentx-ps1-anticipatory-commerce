@@ -93,8 +93,8 @@ agentx1_hack/                      monorepo root (git repo, branch main)
 2. **Commit on the stage branch** in small Conventional Commits.
 3. **When the stage's exit criteria are met:** fetch, rebase on `origin/main` (normally a no-op), run the merge gate, push, and open a pull request into `main` with `gh pr create`. The PR body has: summary, files added or changed, exit-criteria checklist, how it was verified. No Claude attribution lines.
 4. **Merge gate (every PR):** unit tests green; `python evaluate.py --agent agent.py` runs (from Stage 5 on); no kit file touched; no generated or local files committed; `main` stays working.
-5. **Claude merges its own PR** (squash and merge, so `main` stays linear, with the PR title as the commit message) once the merge gate is green and the exit criteria are met. The user is asked only when there is a merge conflict, a failing check that cannot be fixed cleanly, or an important decision that is theirs to make.
-6. **Next stage starts only after the previous PR is merged**, branching from the updated `main`. No stacked or parallel stage branches unless the user asks; if the previous PR is still open, ask first.
+5. **Claude opens the PR and stops.** It never merges on its own initiative and does no further work while any PR is open. The user reviews the PR and may ask for changes (made on the same branch), then replies "start the next stage" (they merged it) or "merge and start the next stage" (Claude squash-merges with the PR title as the commit message, syncs `main`, deletes the branch, then starts). If told "start the next stage" while the PR is still open, Claude asks whether to merge it first.
+6. **Next stage starts only after the previous PR is merged**, branching from the updated `main`. No stacked or parallel stage branches unless the user asks.
 
 **How we avoid merge conflicts**
 - **Sequential stages, short-lived branches.** Conflicts need two lines of work touching the same lines; with one stage at a time and `main` always current, there is nothing to conflict with.
@@ -210,11 +210,14 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/data/dev_extra.jsonl`, `backend/scripts/build_dev_extra.py`, `backend/tests/test_scenarios.py`; small changes to `state.py`, `slots.py`, `lexicon.py`, tests.
 - **Exit (met):** zero wrong commits on dev and on dev_extra; per-tag table in the PR.
 
-### Stage 9 - Evaluation and hardening - `stage-9/evaluation` - todo
-- `scripts/report.py` (per-tag, latency and searches summary); edge-case tests (empty words, very long requests, odd punctuation); code cleanup; finish the root `README.md` run steps.
-- Generate `backend/outputs/results.jsonl` with `--log` from the final agent.
-- **Owns:** `backend/scripts/report.py`, `backend/outputs/results.jsonl`, `backend/tests/test_edge_cases.py`, `README.md` updates.
-- **Exit:** full test suite green; results file produced; numbers frozen for the abstract and note.
+### Stage 9 - Evaluation and hardening - `stage-9/evaluation` - done (on merge)
+- `backend/scripts/report.py`: runs the agent through the organisers' own scorer (`evaluate.run`, `score_one`, `summarise`, imported unchanged) on dev and `dev_extra`, writes `backend/outputs/results.jsonl` (the "outputs on the public dev set" Round 1 asks for), `results_dev_extra.jsonl` and `report.md`: headline numbers against the kit baseline and the perfect-early-committer ceiling, per-tag tables, every request with a wrong answer or wrong commit, cost and speed (per-word latency percentiles, CPU per request, cold start in a fresh interpreter, memory, searches, disk size, extrapolation to a million requests), and the hybrid, rules-only and learned-only variants side by side.
+- Hardening (`tests/test_edge_cases.py`): devanagari, emoji, control characters, zero-width marks, a 20,000-letter word, a 400-digit number, negative and scientific numbers, SQL-looking text, blank words; protocol misuse (finish twice, words after finish, start twice, back-to-back requests, observe before start). Nothing raised. One real weakness found and fixed: the cost of a request grew with the square of its length (2,000 words took 12.9 s). `StateConfig.max_live_words` (200): past it the state stops refreshing per word (the agent can only wait) and `finish()` still reads the whole request once; 2,000 words now take 155 ms and 20,000 words 235 ms, with the final answer unchanged. Real requests are 6 to 25 words and are unaffected.
+- Cleanup: unused imports removed (five files), a scan for unreferenced definitions found none, all scripts re-run.
+- `README.md`: status with the final numbers, layout, run steps and a layered description of the package. Section 4 step 5 above replaced with the user's current PR rule.
+- **Owns:** `backend/scripts/report.py`, `backend/outputs/`, `backend/tests/{test_edge_cases,test_report}.py`, `README.md`; one setting in `config.py` and `state.py`.
+- **Frozen numbers (for the abstract and the note):** dev 43.5 (kit baseline 20.0, accuracy 1.000 vs 0.527, 0 wrong commits, earliness 6.4% of a possible 16.3%, 1.19 searches per request); dev_extra 40.5 (baseline 31.3; accuracy 0.989 vs 0.793; 0 wrong commits); 0.086 ms per word on average (p95 0.40 ms), 1.5 ms CPU per request, cold start 75 ms, 36 MB, about 0.4 CPU-hours per million requests, no model calls, standard library only.
+- **Exit (met):** full test suite green (338 tests); results file produced; numbers frozen.
 
 ### Stage 10 - Stream interface - `stage-10/stream-interface` - todo
 - A thin backend interface that replays or live-feeds a request and streams the trace records; the contract is written down so backend and UI can be built independently. Transport (for example standard-library HTTP with server-sent events) is decided here.
