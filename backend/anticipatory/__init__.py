@@ -6,4 +6,5 @@ Standard library only. Modules, from the bottom up:
     tokens      word normalisation (case, punctuation, rupee forms)
     numbers     price and size numbers: digits, "3.5k", English and Hindi number words
     lexicon     vocabulary built from the catalogue, plus synonyms and cue words
+    slots       slot mentions (category, colour, brand, size, prices) from the words so far
 """
