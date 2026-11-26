@@ -1,0 +1,8 @@
+# Optional: only for the demo stream server and its client (backend/server, scripts/stream_client.py).
+# The agent itself needs NOTHING from this file: it is standard library only (Python 3.8+).
+# These packages need Python 3.11 or newer. Tested with the versions in the comments.
+fastapi>=0.165          # 0.165.0: typed routes, OpenAPI, WebSocket, native server-sent events, body limit
+uvicorn>=0.54           # 0.54.0: the ASGI server that runs the app
+websockets>=17          # 17.4: WebSocket support for uvicorn and the client
+httpx>=0.29             # 0.29.0: HTTP client (client script and tests)
+httpx-sse>=0.4          # 0.4.3: reads server-sent events for httpx
