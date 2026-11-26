@@ -32,6 +32,14 @@ python search.py white Pacevo sneakers  # try the local catalogue search
 
 Scoring our own agent is added once the agent exists (`python evaluate.py --agent agent.py`).
 
+Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`):
+
+```
+python -m unittest discover -s tests -t .
+```
+
+The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms).
+
 ## Working on this repo
 
 - One branch per stage, named `stage-<n>/<short-kebab>`, merged into `main` through a pull request.

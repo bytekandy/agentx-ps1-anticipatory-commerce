@@ -58,6 +58,7 @@ agentx1_hack/                      monorepo root (git repo, branch main)
     anticipatory/                  our package
       config.py                    frozen dataclasses per area (all tunables)
       lexicon.py                   vocabularies from catalogue.csv, synonyms, Hindi-English words
+      tokens.py                    word normalisation shared by lexicon, numbers and slots
       numbers.py                   number words, "k" amounts, Indian price phrasing
       slots.py                     pure per-word slot extraction
       state.py                     incremental FilterState: values, confidences, revisions
@@ -146,10 +147,10 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/scripts/analyze_dev.py`, `docs/dev-analysis.md`.
 - **Exit:** findings written up; lexicon wish-list included; targets in section 1 revised.
 
-### Stage 2 - Vocabulary - `stage-2/vocabulary` - todo
-- `config.py` (vocabulary block), `lexicon.py`, `numbers.py` with unit tests.
-- Vocabularies built from `catalogue.csv`; synonyms ("slides", "floaters"); number words; "0.8k"; size spellings ("UK" after size); Hindi-English word list.
-- **Owns:** `backend/anticipatory/{__init__,config,lexicon,numbers}.py`, `backend/tests/test_lexicon.py`, `backend/tests/test_numbers.py`.
+### Stage 2 - Vocabulary - `stage-2/vocabulary` - done (on merge)
+- `config.py` (vocabulary block), `tokens.py`, `lexicon.py`, `numbers.py` with unit tests.
+- Vocabularies built from `catalogue.csv`; synonyms ("slides", "floaters"); plural, singular, hyphen and spacing variants by rule; number words; "0.8k"; size spellings ("UK" after size); Hindi-English word list; brand-only fuzzy matching; cue-word sets for later stages.
+- **Owns:** `backend/anticipatory/{__init__,config,tokens,numbers,lexicon}.py`, `backend/tests/{__init__,test_tokens,test_numbers,test_lexicon}.py`.
 - **Exit:** unit tests green; every catalogue value and all dev synonyms resolve.
 
 ### Stage 3 - Slot extraction - `stage-3/slot-extraction` - todo
