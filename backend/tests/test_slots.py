@@ -64,6 +64,14 @@ class PhraseSlotTest(SlotsTestCase):
     def test_other_possessives_and_contractions_are_left_alone(self):
         self.assertEqual([m for m in self.read("it's my brother's shoes") if m.slot == "brand"], [])
 
+    def test_a_price_cue_that_ends_in_a_category_word_is_a_price_cue(self):
+        for text in ("black jeans waist 34, price cap 2000", "black jeans waist 34 budget cap 2000"):
+            with self.subTest(text=text):
+                self.assertSlot(text, "category", "jeans")
+                self.assertSlot(text, "max_price", 2000)
+        self.assertEqual([m.value for m in self.read("black cap price 500") if m.slot == "category"],
+                         ["caps"])
+
     def test_a_corrected_phrase_keeps_its_whole_span(self):
         m = self.one("get me runing shoes please", "category")
         self.assertEqual((m.start, m.end), (2, 4))

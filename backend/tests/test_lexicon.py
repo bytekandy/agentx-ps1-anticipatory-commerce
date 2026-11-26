@@ -198,6 +198,8 @@ class CueWordsTest(unittest.TestCase):
         lex = Lexicon(load_rows())
         words = set(SIZE_CUES) | set(CORRECTION_WORDS) | set(LATE_WORDS)
         words |= {w for cue in PRICE_CUES for w in cue}
+        words -= {"cap"}        # a category that ends the cues "price cap" and "budget cap"; the
+                                # slot reader lets those cues claim it (see test_slots)
         for word in sorted(words):
             with self.subTest(word=word):
                 self.assertIsNone(first_match(lex, word))

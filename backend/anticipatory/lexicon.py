@@ -116,6 +116,8 @@ PRICE_CUES: FrozenSet[Tuple[str, ...]] = frozenset({
     ("less", "than"), ("not", "more", "than"), ("no", "more", "than"), ("cheaper", "than"),
     ("budget",), ("tak",), ("se", "kam"), ("ke", "andar"), ("rs",), ("rupees",), ("rupee",),
     ("inr",),
+    # "cap" is also a category: these cues claim it ("price cap 2000" is a budget, not a cap)
+    ("price", "cap"), ("budget", "cap"), ("spending", "cap"),
 })
 
 # Words that mark the next or previous number as a size ("size 9", "UK 10", "32 waist").
