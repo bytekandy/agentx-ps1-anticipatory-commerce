@@ -1,95 +1,127 @@
-"""The contract document (docs/stream-contract.md) is checked against the running system, so
-the two cannot drift apart: examples, error table, endpoint table and limits."""
+"""The contract document (docs/stream-contract.md) is checked against the running system, so the
+two cannot drift apart: examples, endpoint table, OpenAPI document, error table, limits, models."""
 import json
 import re
-import threading
 import unittest
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-from server import http_app
-from server.http_app import MAX_BODY_BYTES, MAX_REPLAY_DELAY_MS, make_server
-from server.service import Limits, StreamService
+from tests._server_fixture import LiveServer, require_extras
+
+require_extras()
+
+import httpx  # noqa: E402
+
+from server import app as app_module  # noqa: E402
+from server import models  # noqa: E402
+from server.app import Settings, create_app  # noqa: E402
+from server.service import AGENT_NAMES, Limits, StreamService  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = (ROOT / "docs" / "stream-contract.md").read_text(encoding="utf-8")
 SOURCE = {p.name: p.read_text(encoding="utf-8") for p in (ROOT / "backend" / "server").glob("*.py")}
+REQUIREMENTS = (ROOT / "backend" / "requirements-server.txt").read_text(encoding="utf-8")
+SERVICE = StreamService()
 
 
 def json_blocks():
     return [json.loads(b) for b in re.findall(r"```json\n(.*?)\n```", DOC, flags=re.S)]
 
 
-def keys(value):
-    return set(value)
+def normal(path):
+    return re.sub(r"\{[^}]*\}", "{}", path)
 
 
 class ExampleShapesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.service = StreamService()
-        session = cls.service.create_session("hybrid", "demo-1")["session"]
-        cls.words = [cls.service.push_word(session, w)
-                     for w in "beige Loomsy sneakers size 10 under 3000 please".split()]
-        cls.final = cls.service.finish(session)
-        cls.start = cls.service.create_session("hybrid", "x")
-        cls.replay_final = list(cls.service.replay(example="dev-0004"))[-1]
-        cls.blocks = {b["type"] if "type" in b else ("evaluation" if "gold_filters" in b else "other"): b
-                      for b in json_blocks()}
+        cls.events = SERVICE.run("beige Loomsy sneakers size 10 under 3000 please".split(), request_id="demo-1")
+        cls.replayed_final = list(SERVICE.replay(example="dev-0004"))[-1]
         cls.by_type = {}
         for block in json_blocks():
             cls.by_type.setdefault(block.get("type", "evaluation" if "gold_filters" in block else "x"), []).append(block)
 
-    def test_start_event(self):
-        self.assertEqual(keys(self.by_type["start"][0]), keys(self.start))
+    def test_there_is_one_example_of_each_event(self):
+        self.assertEqual({k: len(v) for k, v in self.by_type.items()},
+                         {"start": 1, "word": 2, "final": 1, "evaluation": 1})
 
-    def test_word_events_and_their_trace(self):
-        documented = self.by_type["word"]
-        self.assertEqual(len(documented), 2)               # an ordinary word and the commit word
-        for doc, real in zip(documented, (self.words[2], self.words[7])):
-            self.assertEqual(keys(doc), keys(real))
-            self.assertEqual(keys(doc["trace"]), keys(real["trace"]))
-            self.assertEqual(keys(doc["trace"]["filters"]), keys(real["trace"]["filters"]))
-        commit = documented[1]["commit"]
-        self.assertEqual(keys(commit), keys(self.words[7]["commit"]))
-        self.assertEqual(keys(commit["product"]), keys(self.words[7]["commit"]["product"]))
+    def test_start_event_is_exactly_the_real_one(self):
+        self.assertEqual(self.by_type["start"][0], self.events[0])
 
-    def test_the_documented_values_are_the_real_ones(self):
-        """Not just the keys: the examples are real output (apart from rounding the risk)."""
-        doc = self.by_type["word"][1]
-        real = self.words[7]
-        self.assertEqual((doc["seq"], doc["word"], doc["searches"]), (real["seq"], real["word"], real["searches"]))
-        self.assertEqual(doc["trace"]["filters"], real["trace"]["filters"])
-        self.assertEqual(doc["trace"]["reason"], real["trace"]["reason"])
-        self.assertAlmostEqual(doc["trace"]["risk"], real["trace"]["risk"], places=3)
-        self.assertEqual(doc["commit"]["product"], real["commit"]["product"])
+    def test_word_events_have_the_real_keys_and_values(self):
+        ordinary, commit_word = self.by_type["word"]
+        for doc, real in ((ordinary, self.events[3]), (commit_word, self.events[8])):
+            self.assertEqual(set(doc), set(real))
+            self.assertEqual(set(doc["trace"]), set(real["trace"]))
+            self.assertEqual(doc["trace"]["filters"], real["trace"]["filters"])
+            self.assertEqual((doc["seq"], doc["word"], doc["searches"]), (real["seq"], real["word"], real["searches"]))
+            self.assertEqual(doc["trace"]["reason"], real["trace"]["reason"])
+        self.assertEqual(ordinary, dict(self.events[3]))                 # the ordinary one is exact
+        self.assertAlmostEqual(commit_word["trace"]["risk"], self.events[8]["trace"]["risk"], places=3)
+        self.assertEqual(commit_word["commit"], self.events[8]["commit"])
+        self.assertEqual(set(commit_word["committed"]), set(self.events[8]["committed"]))
 
-    def test_final_event_and_its_evaluation(self):
+    def test_final_event_and_evaluation(self):
         doc = self.by_type["final"][0]
-        self.assertEqual(keys(doc), keys(self.final))
-        self.assertEqual(doc["filters"], self.final["filters"])
-        self.assertEqual(keys(doc["commit"]), keys(self.final["commit"]))
+        self.assertEqual(set(doc), set(self.events[-1]))
+        self.assertEqual(doc["filters"], self.events[-1]["filters"])
         evaluation = self.by_type["evaluation"][0]
-        self.assertEqual(keys(evaluation), keys(self.replay_final["evaluation"]))
-        self.assertAlmostEqual(evaluation["score"], self.replay_final["evaluation"]["score"], places=6)
+        self.assertEqual(set(evaluation), set(self.replayed_final["evaluation"]))
+        self.assertAlmostEqual(evaluation["score"], self.replayed_final["evaluation"]["score"], places=6)
+        self.assertEqual(evaluation["gold_filters"], self.replayed_final["evaluation"]["gold_filters"])
 
-    def test_every_documented_trace_field_has_a_row_in_the_field_table(self):
+    def test_every_trace_field_has_a_row_in_the_field_table(self):
         table = DOC[DOC.index("| `trace` field |"):DOC.index("`searches` on the event")]
-        for name in self.words[0]["trace"]:
-            if name not in ("index", "word", "product_id"):           # shown elsewhere in the doc
+        for name in models.Trace.model_fields:
+            if name not in ("index", "word", "product_id"):             # shown in the examples
                 self.assertIn(f"`{name}`", table, name)
 
-    def test_info_keys_are_the_documented_ones(self):
-        info = self.service.info()
-        for name in ("version", "agents", "default_agent", "products", "datasets",
-                     "break_even_risk", "limits"):
-            self.assertIn(name, info)
-        self.assertIn("break_even_risk", DOC)
+
+class EndpointsTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app(SERVICE)
+        cls.rows = re.findall(r"^\| `(GET|POST|WS) (/api/[^`]*)`[^|]*\|.*\| (`?\d{3}`?|upgrade)", DOC, flags=re.M)
+        cls.live = LiveServer(cls.app).__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.live.__exit__()
+
+    def test_the_documented_rest_endpoints_are_exactly_the_openapi_paths(self):
+        documented = {(m, normal(p.split("?")[0])) for m, p, _ in self.rows if m != "WS"}
+        spec = {(method.upper(), normal(path)) for path, ops in self.app.openapi()["paths"].items() for method in ops}
+        self.assertEqual(documented, spec)
+
+    def test_the_websocket_endpoint_is_documented_and_exists(self):
+        self.assertIn(("WS", "/api/ws"), [(m, p.split("?")[0]) for m, p, _ in self.rows])
+        self.assertIn("/api/ws", [getattr(r, "path", None) for r in self.app.routes])
+
+    def test_every_documented_endpoint_answers_with_the_documented_status(self):
+        concrete = {"/api/info": None, "/api/health": None,
+                    "/api/step": {"words": ["black"]}, "/api/answer": {"words": ["black"]},
+                    "/api/run": {"words": ["black"]},
+                    "/api/replay": None, "/api/examples": None, "/api/examples/{id}": None,
+                    "/api/results/{set}": None}
+        paths = {"/api/replay": "/api/replay?text=black&delay_ms=0", "/api/examples/{id}": "/api/examples/dev-0004",
+                 "/api/results/{set}": "/api/results/dev", "/api/examples": "/api/examples?limit=2"}
+        with httpx.Client(base_url=self.live.url) as client:
+            for method, path, success in self.rows:
+                if method == "WS":
+                    continue
+                path = path.split("?")[0]
+                with self.subTest(endpoint=f"{method} {path}"):
+                    body = concrete[path]
+                    response = client.request(method, paths.get(path, path), json=body)
+                    self.assertEqual(response.status_code, int(success.strip("`")))
+
+    def test_the_documented_agents_are_the_real_ones(self):
+        for name in AGENT_NAMES:
+            self.assertIn(f"`{name}`", DOC)
+        self.assertEqual(models.RunRequest.model_fields["agent"].annotation.__args__, tuple(AGENT_NAMES))
 
 
 class ErrorTableTest(unittest.TestCase):
-    def test_every_error_the_code_can_raise_is_documented_with_its_status(self):
+    def test_every_error_the_code_can_send_is_documented_with_its_status(self):
         documented = {}
         for status, codes in re.findall(r"^\| (\d{3}) \| ([^|]+) \|", DOC, flags=re.M):
             for code in re.findall(r"`([a-z_]+)`", codes):
@@ -98,96 +130,50 @@ class ErrorTableTest(unittest.TestCase):
         for text in SOURCE.values():
             for status, code in re.findall(r'ServiceError\((\d{3}), "([a-z_]+)"', text):
                 raised[code] = int(status)
-        raised["internal"] = 500                                       # sent by the HTTP layer
-        self.assertEqual(raised, {k: documented[k] for k in raised if k in documented})
-        self.assertEqual(set(raised) - set(documented), set())          # nothing undocumented
-        self.assertEqual(set(documented) - set(raised) - {"not_found", "internal"}, set())
+            for status, code in re.findall(r'fail\((\d{3}), "([a-z_]+)"', text):
+                raised[code] = int(status)
+        raised.update({"not_found": 404, "method_not_allowed": 405, "body_too_large": 413})   # from the HTTP handler
+        self.assertEqual(raised, documented)
 
 
-class LimitsAndDefaultsTest(unittest.TestCase):
+class LimitsTest(unittest.TestCase):
     def test_documented_numbers_match_the_defaults(self):
         limits = Limits()
-        self.assertEqual((limits.max_sessions, limits.max_words, limits.max_word_chars,
-                          limits.max_text_chars), (200, 500, 100, 4000))
-        self.assertEqual((limits.idle_seconds, limits.finished_seconds), (600.0, 30.0))
-        self.assertEqual((MAX_BODY_BYTES, MAX_REPLAY_DELAY_MS), (16 * 1024, 2000))
-        for text in ("200 open sessions", "500 words", "100 characters", "4000 characters", "16 KB",
-                     "**10 minutes**", "**30 seconds**", "capped at 2000", "default 30"):
+        self.assertEqual((limits.max_words, limits.max_word_chars, limits.max_text_chars, limits.max_body_bytes),
+                         (500, 100, 4000, 16 * 1024))
+        self.assertEqual((app_module.MAX_REPLAY_DELAY_MS, app_module.WS_IDLE_SECONDS), (2000, 300.0))
+        for text in ("500 words", "100 characters", "4000 characters", "16 KB", "capped at 2000",
+                     "5 minutes", "30 second idle limit"):
             self.assertIn(text, DOC)
-        self.assertIn('default=30.0', SOURCE["__main__.py"])
+        self.assertIn("default=30", SOURCE["__main__.py"])
+        self.assertIn("ws_max_size=16 * 1024", SOURCE["__main__.py"])
         self.assertIn('default="127.0.0.1"', SOURCE["__main__.py"])
-        self.assertIn('default=8765', SOURCE["__main__.py"])
+        self.assertIn("default=8765", SOURCE["__main__.py"])
+
+    def test_the_cors_default_matches_the_document(self):
+        for host in ("localhost", "127.0.0.1"):
+            self.assertRegex(f"http://{host}:5173", app_module.LOCAL_ORIGINS)
+        self.assertNotRegex("http://evil.example", app_module.LOCAL_ORIGINS)
+        self.assertIn("`localhost`, `127.0.0.1` or `[::1]`", DOC)
+        self.assertIsNone(Settings().api_key)
 
 
-class EndpointTableTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.server = make_server(StreamService(), port=0)
-        cls.port = cls.server.server_address[1]
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+class LibrariesAndHygieneTest(unittest.TestCase):
+    def test_every_required_package_is_explained_in_the_document(self):
+        for package in ("fastapi", "uvicorn", "websockets", "httpx", "httpx-sse"):
+            self.assertRegex(REQUIREMENTS, rf"(?m)^{re.escape(package)}>=")
+            self.assertIn(package, DOC.lower())
+        self.assertIn("Python 3.11", REQUIREMENTS)
+        self.assertIn("Python 3.11 or newer", DOC)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server.server_close()
+    def test_the_agent_package_does_not_depend_on_any_of_them(self):
+        for path in (ROOT / "backend" / "anticipatory").glob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"(?m)^\s*(import|from)\s+(fastapi|uvicorn|httpx|httpx_sse|websockets|pydantic|starlette)\b", path.name)
 
-    def request(self, method, path, body=None):
-        data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req) as response:
-                response.read()
-                return response.status
-        except urllib.error.HTTPError as err:
-            err.read()
-            err.close()
-            return err.code
-
-    def new_session(self):
-        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/sessions", data=b"{}", method="POST")
-        with urllib.request.urlopen(req) as response:
-            return json.loads(response.read())["session"]
-
-    def concrete(self, method, template):
-        """A real URL and body for a documented endpoint template."""
-        path = template.split("?")[0]
-        if "/api/sessions/{id}" in path:
-            path = path.replace("{id}", self.new_session())
-            return path, ({"word": "black"} if path.endswith("/words") else {})
-        if path == "/api/replay":
-            return "/api/replay?text=black&delay_ms=0", None
-        if path == "/api/examples/{id}":
-            return "/api/examples/dev-0004", None
-        if path == "/api/results/{set}":
-            return "/api/results/dev", None
-        return path + ("?set=dev&limit=2" if path == "/api/examples" else ""), ({} if method == "POST" else None)
-
-    def test_every_documented_endpoint_exists_and_answers_with_the_documented_status(self):
-        rows = re.findall(r"^\| `(GET|POST|DELETE) (/api/[^`]*)`[^|]*\|.*\| (`?\d{3}`?)", DOC, flags=re.M)
-        documented = {(m, p.split("?")[0]) for m, p, _ in rows}
-        self.assertEqual(documented, {
-            ("GET", "/api/health"), ("GET", "/api/info"), ("POST", "/api/sessions"),
-            ("POST", "/api/sessions/{id}/words"), ("POST", "/api/sessions/{id}/finish"),
-            ("DELETE", "/api/sessions/{id}"), ("GET", "/api/replay"), ("GET", "/api/examples"),
-            ("GET", "/api/examples/{id}"), ("GET", "/api/results/{set}")})
-        for method, template, success in rows:
-            with self.subTest(endpoint=f"{method} {template}"):
-                path, body = self.concrete(method, template)
-                self.assertEqual(self.request(method, path, body), int(success.strip("`")))
-
-    def test_the_documented_agents_are_the_real_ones(self):
-        from server.service import AGENT_NAMES
-        for name in AGENT_NAMES:
-            self.assertIn(f"`{name}`", DOC)
-
-
-class DocumentHygieneTest(unittest.TestCase):
-    def test_no_em_or_en_dashes(self):
-        self.assertNotRegex(DOC, "[–—]")
-
-    def test_every_json_block_parses(self):
-        self.assertEqual(len(json_blocks()), 5)       # start, word, commit word, final, evaluation
+    def test_no_em_or_en_dashes_and_every_json_block_parses(self):
+        self.assertNotRegex(DOC, "[" + chr(0x2013) + chr(0x2014) + "]")
+        self.assertEqual(len(json_blocks()), 5)
 
 
 if __name__ == "__main__":
