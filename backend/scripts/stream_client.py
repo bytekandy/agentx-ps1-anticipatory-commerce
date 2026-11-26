@@ -1,64 +1,28 @@
-"""A small client for the stream server, and a worked example of the contract.
+"""A small client for the stream server, built on httpx, httpx-sse and websockets.
 
-    cd backend
-    python -m server &                                   # start the server in another terminal
+    pip install -r requirements-server.txt            # Python 3.11 or newer
+    cd backend && python -m server &                   # start the server
     python scripts/stream_client.py --live "black running shoes size 9 under 2000"
+    python scripts/stream_client.py --rest "black running shoes size 9 under 2000"
     python scripts/stream_client.py --replay "black running shoes size 9 under 2000" --delay 300
     python scripts/stream_client.py --replay-example dev-0004 --delay 0
 
-`--live` sends the words one at a time (POST per word) and prints each trace event as it comes
-back, which is how a typed or spoken request would be fed. `--replay` lets the server pace the
-whole request as server-sent events. Standard library only; see docs/stream-contract.md.
+--live    one WebSocket: the words go out one by one and the server pushes each trace event
+--rest    the stateless way: one POST per word carrying the words so far
+--replay  the server paces the whole request as server-sent events
+Set STREAM_API_KEY (or --api-key) if the server requires a key. See docs/stream-contract.md.
 """
 import argparse
 import json
+import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional
+from urllib.parse import urlencode
 
-
-def call(base: str, method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    data = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(base + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as err:
-        raise SystemExit(describe(method, path, err))
-
-
-def describe(method: str, path: str, err: urllib.error.HTTPError) -> str:
-    """A readable message for an error response, e.g. "GET /api/replay: 404 unknown_example: ..."."""
-    try:
-        payload = json.loads(err.read() or b"{}").get("error", {})
-    except ValueError:
-        payload = {}
-    finally:
-        err.close()
-    return f"{method} {path}: {err.code} {payload.get('code', '')}: {payload.get('message', err.reason)}"
-
-
-def events(base: str, path: str) -> Iterator[Tuple[str, Dict[str, Any]]]:
-    """Read a server-sent event stream: yields (event name, data) until the stream ends."""
-    try:
-        response = urllib.request.urlopen(base + path)
-    except urllib.error.HTTPError as err:
-        raise SystemExit(describe("GET", path.split("?")[0], err))
-    with response:
-        name, data = None, []
-        for raw in response:
-            line = raw.decode("utf-8").rstrip("\n")
-            if line.startswith("event: "):
-                name = line[7:]
-            elif line.startswith("data: "):
-                data.append(line[6:])
-            elif not line and name:
-                yield name, json.loads("\n".join(data))
-                name, data = None, []
+import httpx
+from httpx_sse import connect_sse
+from websockets.exceptions import ConnectionClosed, InvalidStatus
+from websockets.sync.client import connect
 
 
 def show(event: Dict[str, Any], out=None) -> None:
@@ -78,14 +42,65 @@ def show(event: Dict[str, Any], out=None) -> None:
             print(f"scored: correct={e['correct']} early_words={e['early_words']} "
                   f"wrong_commits={e['wrong_commits']} score={e['score']:.3f}", file=out)
     elif kind == "start":
-        print(f"start: session {event['session']}, agent {event['agent']}", file=out)
+        print(f"start: agent {event['agent']}", file=out)
+    elif kind == "error":
+        print(f"error: {event['error']['code']}: {event['error']['message']}", file=out)
+
+
+def check(response: httpx.Response) -> httpx.Response:
+    """Turn an error response into a readable message instead of a traceback."""
+    if response.is_error:
+        response.read()                         # a streamed response has to be read before parsing
+        try:
+            error = response.json()["error"]
+            detail = f"{error['code']}: {error['message']}"
+        except (ValueError, KeyError):
+            detail = response.text[:200]
+        raise SystemExit(f"{response.request.method} {response.url.path}: {response.status_code} {detail}")
+    return response
+
+
+def live(server: str, text: str, agent: str, key: Optional[str]) -> None:
+    url = server.replace("http", "ws", 1) + "/api/ws?" + urlencode({"agent": agent, **({"api_key": key} if key else {})})
+    try:
+        with connect(url) as ws:
+            show(json.loads(ws.recv()))
+            for word in text.split():
+                ws.send(json.dumps({"word": word}))
+                show(json.loads(ws.recv()))
+            ws.send(json.dumps({"finish": True}))
+            show(json.loads(ws.recv()))
+    except InvalidStatus as err:
+        raise SystemExit(f"websocket refused: HTTP {err.response.status_code} "
+                         f"({'missing or wrong API key' if err.response.status_code == 403 else 'see the server log'})")
+    except ConnectionClosed as err:
+        raise SystemExit(f"websocket closed: {err.rcvd.code if err.rcvd else '?'}")
+
+
+def rest(server: str, text: str, agent: str, key: Optional[str]) -> None:
+    words = text.split()
+    with httpx.Client(base_url=server, headers={"X-API-Key": key} if key else {}) as client:
+        for n in range(1, len(words) + 1):
+            show(check(client.post("/api/step", json={"words": words[:n], "agent": agent})).json())
+        show(check(client.post("/api/answer", json={"words": words, "agent": agent})).json())
+
+
+def replay(server: str, query: Dict[str, Any], key: Optional[str]) -> Iterator[Dict[str, Any]]:
+    with httpx.Client(base_url=server, headers={"X-API-Key": key} if key else {}, timeout=None) as client:
+        with connect_sse(client, "GET", "/api/replay", params=query) as source:
+            check(source.response)
+            for event in source.iter_sse():
+                if event.event != "done":
+                    yield json.loads(event.data)
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--server", default="http://127.0.0.1:8765")
+    parser.add_argument("--api-key", default=os.environ.get("STREAM_API_KEY"))
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--live", metavar="TEXT", help="send these words one at a time")
+    mode.add_argument("--live", metavar="TEXT", help="send these words one at a time over a WebSocket")
+    mode.add_argument("--rest", metavar="TEXT", help="one stateless POST per word")
     mode.add_argument("--replay", metavar="TEXT", help="have the server stream this request")
     mode.add_argument("--replay-example", metavar="ID", help="stream a dev or dev_extra request")
     parser.add_argument("--agent", default="hybrid", choices=("hybrid", "heuristic", "learned"))
@@ -93,17 +108,14 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     if args.live is not None:
-        start = call(args.server, "POST", "/api/sessions", {"agent": args.agent})
-        show(start)
-        for word in args.live.split():
-            show(call(args.server, "POST", f"/api/sessions/{start['session']}/words", {"word": word}))
-        show(call(args.server, "POST", f"/api/sessions/{start['session']}/finish"))
-        return 0
-    query = {"agent": args.agent, "delay_ms": args.delay}
-    query.update({"text": args.replay} if args.replay is not None else {"example": args.replay_example})
-    for name, data in events(args.server, "/api/replay?" + urllib.parse.urlencode(query)):
-        if name != "done":
-            show(data)
+        live(args.server, args.live, args.agent, args.api_key)
+    elif args.rest is not None:
+        rest(args.server, args.rest, args.agent, args.api_key)
+    else:
+        query = {"agent": args.agent, "delay_ms": args.delay}
+        query.update({"text": args.replay} if args.replay is not None else {"example": args.replay_example})
+        for event in replay(args.server, query, args.api_key):
+            show(event)
     return 0
 
 
