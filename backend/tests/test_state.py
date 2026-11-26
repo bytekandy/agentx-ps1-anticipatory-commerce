@@ -183,6 +183,37 @@ class PendingCorrectionTest(StateTestCase):
         self.assertAlmostEqual(unsettled.confidence, steady.confidence * 0.5)
 
 
+class CuePendingTest(StateTestCase):
+    def pending(self, text):
+        return self.snap(text, final=False).cue_pending
+
+    def test_a_cue_waiting_for_its_number_is_pending(self):
+        for text in ("black cap within Rs.", "black cap up to", "black cap budget of",
+                     "black cap under", "sandals size", "jeans waist"):
+            with self.subTest(text=text):
+                self.assertTrue(self.pending(text))
+                self.assertFalse(self.snap(text, final=False).settled)
+
+    def test_the_number_arriving_clears_it(self):
+        self.assertFalse(self.pending("black cap under 500"))
+        self.assertFalse(self.pending("sandals size 9"))
+
+    def test_make_is_pending_because_it_may_become_make_that(self):
+        self.assertTrue(self.pending("black cap make"))
+        self.assertFalse(self.pending("black cap make that"))
+        self.assertFalse(self.pending("black cap make sure"))
+
+    def test_make_alone_is_not_a_correction_alarm(self):
+        self.assertFalse(self.snap("black cap make", final=False).correction_pending)
+
+    def test_a_cue_followed_by_a_pause_is_not_pending(self):
+        self.assertFalse(self.pending("black cap under, hmm"))
+
+    def test_plain_words_are_not_pending(self):
+        self.assertFalse(self.pending("black cap please"))
+        self.assertFalse(self.pending(""))
+
+
 class NumberGrowthTest(StateTestCase):
     def test_a_growing_price_is_pending_and_not_yet_read(self):
         s = self.snap("shirt under two thousand", final=False)

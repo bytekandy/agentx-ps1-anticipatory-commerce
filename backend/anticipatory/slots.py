@@ -42,6 +42,7 @@ _MIN_PRICE_CUES = frozenset({
 
 # Cues that follow the number: "1500 tak", "1500 or less". The cues that precede a number
 # ("under", "budget") are deliberately absent, or "size 9 under 1500" would make 9 a price.
+_POSTFIX_ONLY = frozenset({("tak",), ("se", "kam"), ("ke", "andar")})   # never a cue BEFORE a number
 _POSTFIX_PRICE_CUES = frozenset({
     ("tak",), ("se", "kam"), ("ke", "andar"), ("rupees",), ("rupee",), ("rs",), ("inr",),
     ("max",), ("maximum",), ("or", "less"), ("or", "below"), ("or", "under"),
@@ -163,13 +164,15 @@ def _number_mention(tokens, start, reading: NumberReading, lexicon: Lexicon,
     if before:
         kind, slot = before
         if kind == "price":
-            return _price(slot, start, end, reading, config.slots.confidence_price_cued,
-                          "price-cue", config)
-        if size:
-            return _size(start, end, reading, size, config.slots.confidence_size_cued,
-                         "size-cue")
-        # A size cue before a number that is no real size ("10 UK 3000 max": the UK belongs
-        # to the 10), so look at the other clues.
+            mention = _price(slot, start, end, reading, config.slots.confidence_price_cued,
+                             "price-cue", config)
+        else:
+            mention = (_size(start, end, reading, size, config.slots.confidence_size_cued,
+                             "size-cue") if size else None)
+        if mention:
+            return mention
+        # The cue does not fit this number ("under 50" is no price, "10 UK 3000 max": the UK
+        # belongs to the 10), so look at the other clues.
 
     if _has_currency_mark(tokens[start]):               # "Rs.1500", "₹3,000", "1500/-"
         return _price("max_price", start, end, reading, config.slots.confidence_price_cued,
@@ -235,11 +238,14 @@ def _build_cue_table() -> Dict[str, List[Tuple[Tuple[str, ...], str]]]:
     table: Dict[str, List[Tuple[Tuple[str, ...], str]]] = {}
     for cues, slot in ((PRICE_CUES, "max_price"), (_MIN_PRICE_CUES, "min_price")):
         for cue in cues:
-            table.setdefault(cue[-1], []).append((cue, slot))
+            if cue not in _POSTFIX_ONLY:       # "1500 tak 34 waist": tak belongs to the 1500
+                table.setdefault(cue[-1], []).append((cue, slot))
     return table
 
 
 _CUES_BY_LAST_WORD = _build_cue_table()
+_MULTIWORD_CUES = tuple(cue for cue in set(PRICE_CUES) | _MIN_PRICE_CUES
+                        if len(cue) > 1 and cue not in _POSTFIX_ONLY)
 
 
 def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
@@ -262,6 +268,28 @@ def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
                 and (best is None or n > len(best[0])):
             best = (cue, slot)
     return ("price", best[1]) if best else None
+
+
+def cue_awaiting_number(tokens: Sequence[Token]) -> bool:
+    """True if the words so far end on a size or price cue that has not met its number yet.
+
+    "within Rs.", "up to", "budget of", "size": the shopper is mid-phrase and a value is
+    on its way. ("9 UK" also counts for one word: that cue closes a number already heard.)
+    """
+    if not tokens or tokens[-1].clause_end:
+        return False
+    return _cue_before(tokens, len(tokens)) is not None or _inside_cue(tokens)
+
+
+def _inside_cue(tokens: Sequence[Token]) -> bool:
+    """The words end partway through a multi-word cue: "up" of "up to", "not more" of
+    "not more than"."""
+    texts = [t.text for t in tokens[-3:]]
+    for cue in _MULTIWORD_CUES:
+        for n in range(1, len(cue)):
+            if texts[-n:] == list(cue[:n]):
+                return True
+    return False
 
 
 def _postfix_price_slot(tokens, end) -> Optional[str]:

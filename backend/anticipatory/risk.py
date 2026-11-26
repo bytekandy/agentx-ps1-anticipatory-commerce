@@ -12,8 +12,11 @@ Rules every implementation follows
   * `n_candidates=None` means "assume the best case, exactly one match". The policy uses it to
     decide whether a search is worth making before it spends one.
 """
+import json
+import math
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from pathlib import Path
+from typing import Dict, List, Optional, Protocol, Sequence
 
 from .config import DEFAULT_CONFIG, Config
 from .state import Snapshot
@@ -31,6 +34,13 @@ class RiskInput:
     revisions: int                  # corrections already applied in this request
     markers: int                    # correction markers heard so far
     n_candidates: Optional[int]     # products matching now; None = assume exactly one
+    # How complete the request looks: a shopper who has given brand, size and budget is
+    # probably nearly done, one who has given only a category is not. Added for Stage 6.
+    has_brand: bool = False
+    has_size: bool = False
+    has_price: bool = False
+    oldest_age: int = 0             # words since the oldest value the search uses ended
+    last_slot: str = ""             # the slot mentioned most recently ("" if none)
 
     @classmethod
     def from_snapshot(cls, snapshot: Snapshot, used_slots,
@@ -46,6 +56,11 @@ class RiskInput:
             revisions=sum(b.revisions for b in beliefs),
             markers=len(snapshot.markers),
             n_candidates=n_candidates,
+            has_brand="brand" in snapshot.slots,
+            has_size="size" in snapshot.slots,
+            has_price="max_price" in snapshot.slots or "min_price" in snapshot.slots,
+            oldest_age=max((snapshot.words_seen - b.end for b in beliefs), default=0),
+            last_slot=max(beliefs, key=lambda b: b.end).slot if beliefs else "",
         )
 
 
@@ -82,3 +97,106 @@ class HeuristicRisk:
         if features.at_clause_end:
             risk += cfg.clause_end_penalty
         return min(1.0, risk)
+
+
+# ----------------------------------------------------------------------------- learned model
+
+DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "data" / "risk_model.json"
+_SLOTS = ("category", "colour", "brand", "size", "max_price")
+
+
+def risk_features(f: RiskInput) -> Dict[str, float]:
+    """The numbers a risk model sees, by name. Training and runtime share this function.
+
+    Mostly yes/no flags and small buckets, so identical states group together and the model
+    stays tiny and easy to explain.
+    """
+    q = f.quiet_words
+    x: Dict[str, float] = {"bias": 1.0}
+    for bucket in (0, 1, 2):
+        x[f"quiet={bucket}"] = float(q == bucket)               # 3 or more words is the baseline
+    x["clause_end"] = float(f.at_clause_end)
+    x["clause_end*quiet=0"] = float(f.at_clause_end and q == 0)
+    x["conf_gap"] = 1.0 - f.weakest_confidence
+    x["revised"] = float(f.revisions > 0)
+    x["marker_seen"] = float(f.markers > 0)
+    x["slots_used"] = f.slots_used / 5.0
+    x["has_brand"] = float(f.has_brand)
+    x["has_size"] = float(f.has_size)
+    x["has_price"] = float(f.has_price)
+    x["has_all_three"] = float(f.has_brand and f.has_size and f.has_price)
+    for slot in _SLOTS:
+        x[f"last={slot}"] = float(f.last_slot == slot)
+    x["words_seen"] = min(f.words_seen, 25) / 25.0
+    x["oldest_age"] = min(f.oldest_age, 15) / 15.0
+    x["oldest_age>=4"] = float(f.oldest_age >= 4)
+    return x
+
+
+FEATURE_NAMES = tuple(risk_features(RiskInput(0, 0, False, True, 0, 1.0, 0, 0, 1)))
+
+
+def sigmoid(z: float) -> float:
+    if z >= 0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
+
+
+class LearnedRisk:
+    """Logistic regression over `risk_features`, trained offline (`scripts/train_risk.py`).
+
+    Standard library only: the weights are a small JSON file next to the code. The one rule
+    kept from the hand-coded model is that an unsettled state is never safe: a correction on
+    its way or a number still growing is not something a probability should talk away.
+    """
+
+    def __init__(self, weights: Dict[str, float], config: Config = DEFAULT_CONFIG,
+                 multiplier: float = 1.0):
+        unknown = set(weights) - set(FEATURE_NAMES)
+        if unknown:
+            raise ValueError(f"model has features this code does not know: {sorted(unknown)}")
+        self.weights = dict(weights)
+        self.config = config
+        configured = config.learned.safety_multiplier
+        self.multiplier = multiplier if configured is None else configured
+
+    @classmethod
+    def from_file(cls, path: Optional[Path] = None, config: Config = DEFAULT_CONFIG) -> "LearnedRisk":
+        with open(path or DEFAULT_MODEL_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        multiplier = float(data.get("meta", {}).get("safety_multiplier", 1.0))
+        return cls(dict(zip(data["features"], data["weights"])), config, multiplier)
+
+    def probability(self, features: RiskInput) -> float:
+        x = risk_features(features)
+        return sigmoid(sum(self.weights.get(name, 0.0) * value for name, value in x.items()))
+
+    def p_wrong(self, features: RiskInput) -> float:
+        if not features.settled:
+            return self.config.risk.unsettled_risk
+        return min(1.0, self.probability(features) * self.multiplier)
+
+
+class HybridRisk:
+    """The hand-coded rules while the state is fresh, the learned model once it is calm.
+
+    A value that was only just heard (`quiet_words < hold_words`), or one the shopper paused
+    after (a comma or period), is where corrections start, and no feature tells a correction
+    from a calm continuation there. These states keep the heuristic's deliberate caution. In a
+    calm state (a word or more has passed, no pause) the learned model decides, and it can
+    commit earlier than a flat rule would: it weighs how complete the request looks, how
+    sure each slot is and whether a correction has already happened.
+    """
+
+    def __init__(self, learned: LearnedRisk, config: Config = DEFAULT_CONFIG):
+        self.learned = learned
+        self.rules = HeuristicRisk(config)
+        self.hold_words = config.risk.hold_words
+
+    def p_wrong(self, features: RiskInput) -> float:
+        if not features.settled:
+            return self.rules.p_wrong(features)             # never safe, whatever the model says
+        if features.quiet_words < self.hold_words or features.at_clause_end:
+            return max(self.rules.p_wrong(features), self.learned.p_wrong(features))
+        return self.learned.p_wrong(features)

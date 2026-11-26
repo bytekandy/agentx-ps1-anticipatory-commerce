@@ -30,12 +30,14 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import CORRECTION_WORDS, LATE_WORDS, PRICE_CUES, Lexicon
-from .slots import SlotMention, extract_mentions, size_fits_category
+from .slots import SlotMention, cue_awaiting_number, extract_mentions, size_fits_category
 from .tokens import Token, make_token
 
 # Two-word markers that the single-word list cannot express ("make that XXL", "make it Kudova").
 # "make sure" is not a marker, which is why "make" alone is not in `CORRECTION_WORDS`.
 MARKER_PHRASES = frozenset({("make", "that"), ("make", "it")})
+# A word that, said last, almost always opens a two-word marker: wait one word to see.
+MARKER_STARTERS = frozenset({"make"})
 
 # Slots in the order the evaluator expects; `min_price` is added only when it is present.
 REPORTED_SLOTS = ("category", "colour", "size", "brand", "max_price")
@@ -79,12 +81,13 @@ class Snapshot:
     correction_pending: bool                # a marker was heard and its replacement has not come
     at_clause_end: bool                     # the last word ended with , . ; ! ?
     quiet_words: int                        # words since the last mention ended
+    cue_pending: bool = False               # the words end on a cue awaiting its number, or on "make"
     unsettled_factor: float = 0.5
 
     @property
     def settled(self) -> bool:
-        """No correction on its way and no number still growing."""
-        return not self.correction_pending and not self.pending_slots
+        """No correction on its way, no number still growing, no cue awaiting its number."""
+        return not self.correction_pending and not self.pending_slots and not self.cue_pending
 
     @property
     def filters(self) -> Dict[str, object]:
@@ -179,6 +182,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         markers=tuple(markers),
         pending_slots=tuple(pending),
         correction_pending=_correction_pending(markers, heard, words, cfg),
+        cue_pending=_something_follows(tokens),
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
         unsettled_factor=cfg.unsettled_factor,
@@ -223,6 +227,13 @@ def _fold(slot: str, events: Sequence[_Event], cfg) -> Optional[SlotBelief]:
                                 belief.history + ((belief.value, belief.start, belief.end),),
                                 marked=ev.marked, late=ev.late)
     return belief
+
+
+def _something_follows(tokens: Sequence[Token]) -> bool:
+    """The words end on a word that announces more: a size or price cue awaiting its number,
+    or "make" (which may be about to become "make that"). "make sure" costs one word of wait.
+    """
+    return cue_awaiting_number(tokens) or (bool(tokens) and tokens[-1].text in MARKER_STARTERS)
 
 
 def _correction_pending(markers: Sequence[Marker], heard: Sequence[SlotMention],
