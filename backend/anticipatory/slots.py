@@ -244,6 +244,8 @@ def _build_cue_table() -> Dict[str, List[Tuple[Tuple[str, ...], str]]]:
 
 
 _CUES_BY_LAST_WORD = _build_cue_table()
+_MULTIWORD_CUES = tuple(cue for cue in set(PRICE_CUES) | _MIN_PRICE_CUES
+                        if len(cue) > 1 and cue not in _POSTFIX_ONLY)
 
 
 def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
@@ -266,6 +268,28 @@ def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
                 and (best is None or n > len(best[0])):
             best = (cue, slot)
     return ("price", best[1]) if best else None
+
+
+def cue_awaiting_number(tokens: Sequence[Token]) -> bool:
+    """True if the words so far end on a size or price cue that has not met its number yet.
+
+    "within Rs.", "up to", "budget of", "size": the shopper is mid-phrase and a value is
+    on its way. ("9 UK" also counts for one word: that cue closes a number already heard.)
+    """
+    if not tokens or tokens[-1].clause_end:
+        return False
+    return _cue_before(tokens, len(tokens)) is not None or _inside_cue(tokens)
+
+
+def _inside_cue(tokens: Sequence[Token]) -> bool:
+    """The words end partway through a multi-word cue: "up" of "up to", "not more" of
+    "not more than"."""
+    texts = [t.text for t in tokens[-3:]]
+    for cue in _MULTIWORD_CUES:
+        for n in range(1, len(cue)):
+            if texts[-n:] == list(cue[:n]):
+                return True
+    return False
 
 
 def _postfix_price_slot(tokens, end) -> Optional[str]:

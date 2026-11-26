@@ -182,6 +182,20 @@ class PriceTest(SlotsTestCase):
                           if m.slot == "max_price"], [])
 
 
+class CueAwaitingNumberTest(SlotsTestCase):
+    def test_cues_at_the_end(self):
+        from anticipatory.slots import cue_awaiting_number
+        for text in ("under", "budget of", "within Rs.", "size", "UK", "up to"):
+            with self.subTest(text=text):
+                self.assertTrue(cue_awaiting_number(tokenize_text("black cap " + text)))
+        for text in ("up", "not more", "less", "no more"):          # partway through a cue
+            with self.subTest(text=text):
+                self.assertTrue(cue_awaiting_number(tokenize_text("black cap " + text)))
+        for text in ("under 500", "black cap", "size 9", "", "under,"):
+            with self.subTest(text=text):
+                self.assertFalse(cue_awaiting_number(tokenize_text(text)))
+
+
 class IncompleteNumberTest(SlotsTestCase):
     def test_a_price_at_the_end_may_still_grow(self):
         m = self.one("shirt under two thousand", "max_price", final=False)
