@@ -121,13 +121,17 @@ PRICE_CUES: FrozenSet[Tuple[str, ...]] = frozenset({
 })
 
 # Words that mark the next or previous number as a size ("size 9", "UK 10", "32 waist").
-SIZE_CUES: FrozenSet[str] = frozenset({"size", "sz", "uk", "number", "waist"})
+# "saiz" and "siz" are how "size" is often spelt in Hinglish; a typo-correction cannot reach them.
+SIZE_CUES: FrozenSet[str] = frozenset({"size", "sz", "uk", "number", "waist", "saiz", "siz"})
 
 # Words that often announce a correction (Stage 4 decides what they mean in context).
 CORRECTION_WORDS: FrozenSet[str] = frozenset({
     "oops", "whoops", "sorry", "actually", "wait", "meant", "mean", "rather", "matlab",
     "nahi", "nahin", "instead", "change", "scratch", "no", "correction", "ignore", "disregard",
 })
+
+# Prior weight of a cue word in spelling correction (catalogue words use their row counts).
+CUE_WORD_WEIGHT = 20.0
 
 # Words that often open an afterthought ("and in navy", "oh, and size M").
 LATE_WORDS: FrozenSet[str] = frozenset({"and", "also", "aur", "plus", "oh", "additionally"})
@@ -229,8 +233,15 @@ class Lexicon:
             w for r in rows for text in (r.get("title", ""), r.get("description", ""))
             for w in re.findall(r"[a-z]+", text.lower()))
         self.word_weights = self._word_weights(rows)
+        # Cue words ("size", "under", "sorry") are corrected too: "saiz 10" is still a size. They
+        # join the vocabulary with a small weight so a product word is never pulled towards them.
+        cue_words = ({w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS
+                     | LATE_WORDS)
+        weights = dict(self.word_weights)
+        for w in cue_words:
+            weights.setdefault(w, CUE_WORD_WEIGHT)
         self.corrector = SpellingCorrector(
-            self.word_weights, self.catalogue_words - frozenset(self.word_weights),
+            weights, self.catalogue_words - frozenset(weights),
             spelling or DEFAULT_CONFIG.spelling)
         self._max_phrase_len = max(len(key) for key in self._table)
         self._confidence = {
@@ -317,12 +328,12 @@ class Lexicon:
     # -- queries -----------------------------------------------------------------------------
 
     def lookup(self, tokens: Sequence[Token], i: int) -> Optional[PhraseMatch]:
-        """The longest known phrase starting at tokens[i], or None. Never crosses a clause end."""
+        """The longest known phrase starting at tokens[i], or None.
+
+        A phrase of two or more words is still one phrase when a comma or full stop sits inside
+        it ("navy, blue", "t, shirt", "extra, large"): the whole phrase has to be a known one,
+        so a pause between two separate values ("black, white") is not merged."""
         limit = min(self._max_phrase_len, len(tokens) - i)
-        for k in range(limit):
-            if tokens[i + k].clause_end:
-                limit = k + 1
-                break
         for n in range(limit, 0, -1):
             entry = self._table.get(tuple(t.text for t in tokens[i:i + n]))
             if entry:

@@ -139,8 +139,13 @@ Both have tests; dev and `dev_extra` scores are unchanged by them.
 - **Synonyms outside the seed list are not understood** ("sliders", "lowers"). The agent notices a
   word it cannot place and does not commit early on it; the final answer is the best match
   without it. Planned: a soft lexicon from word vectors after Round 1.
-- **Punctuation inside a phrase** breaks it (section 5).
-- **A typo in a cue word** ("saiz 10") is not corrected: only product words are.
+- **Punctuation inside a phrase** (fixed in Stage 13): a known phrase now survives a comma inside it
+  ("navy, blue", "t, shirt", "extra, large"). A comma between a cue and its number ("size, nine",
+  "one thousand, five hundred") is still read as a pause, so those values are read late; commas
+  after every third word changed 13 of 383 final answers (34 before), with 0 wrong commits (1 before).
+- **A typo in a cue word** (fixed in Stage 13): size, price and correction cue words are now
+  spell-corrected too ("unedr 2000", "sorey I meant"), and "saiz"/"siz" are listed as size cues.
+  Cue typos on 287 requests: 0 changed answers and 0 wrong commits (17 and 5 before).
 - **Half sizes** ("10.5") do not exist in the catalogue; the final answer is a near product.
 - **A shopper who contradicts themselves without a marker** gets the last value at lower
   confidence, and no early commit on it.
