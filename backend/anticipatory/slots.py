@@ -22,7 +22,7 @@ become "two thousand five hundred". Callers treat incomplete mentions as "wait",
 facts.
 """
 from dataclasses import dataclass, replace
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import PRICE_CUES, SIZE_CUES, Lexicon
@@ -66,8 +66,23 @@ class SlotMention:
 
 # ----------------------------------------------------------------------------- public API
 
+@dataclass(frozen=True)
+class Reading:
+    """What slot extraction saw: the (spell-corrected) words, which of them were corrected, and
+    the mentions found. The unknown-word detector needs the words as well as the mentions."""
+    tokens: Tuple[Token, ...]
+    corrected: FrozenSet[int]
+    mentions: Tuple["SlotMention", ...]
+
+
 def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
                      config: Config = DEFAULT_CONFIG, final: bool = False) -> List[SlotMention]:
+    """All slot mentions in the words so far; see `read_words` for the full reading."""
+    return list(read_words(tokens, lexicon, config, final).mentions)
+
+
+def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAULT_CONFIG,
+               final: bool = False) -> Reading:
     """All slot mentions in the words so far, in order of position.
 
     Deterministic and stateless: the result depends only on `tokens`. A mention that is
@@ -78,6 +93,7 @@ def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
     """
     mentions: List[SlotMention] = []
     tokens, corrected = lexicon.corrector.correct_tokens(tokens)
+    corrected_tokens = tuple(tokens)
     i = 0
     while i < len(tokens):
         phrase = lexicon.lookup(tokens, i)
@@ -99,7 +115,7 @@ def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
             i += reading.length
             continue
         i += 1
-    return mentions
+    return Reading(corrected_tokens, corrected, tuple(mentions))
 
 
 def latest_filters(mentions: Sequence[SlotMention], lexicon: Lexicon,

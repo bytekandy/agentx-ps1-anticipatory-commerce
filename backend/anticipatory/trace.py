@@ -22,8 +22,10 @@ class TraceRecord:
     product_id: Optional[str]               # set when committing
     risk: Optional[float]                   # the risk the policy weighed, if it got that far
     reason: str                             # a short human-readable why
+    unresolved: Tuple[str, ...] = ()        # constraints we could not match, e.g. ("brand: nike",)
 
     def to_dict(self) -> Dict[str, Any]:
         record = asdict(self)
         record["pending_slots"] = list(self.pending_slots)
+        record["unresolved"] = list(self.unresolved)
         return record

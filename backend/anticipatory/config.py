@@ -5,7 +5,7 @@ logic modules contain no magic numbers. Later stages append blocks (slots, state
 `Config`; they do not edit existing ones.
 """
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -105,9 +105,6 @@ class RiskConfig:
     # every correction after a pause follows a value that ended with one.
     clause_end_penalty: float = 0.5
     unsettled_risk: float = 1.0       # a correction is pending or a number is still growing
-    # In the hybrid, a state resting on a value read below this confidence (a spell-corrected
-    # word, an unmarked revision) stays under the rules' caution instead of going to the model.
-    rules_confidence_floor: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -140,8 +137,34 @@ class SpellingConfig:
     max_cost_medium: float = 1.0      # five or six letters: one ordinary slip
     max_cost_long: float = 1.7        # seven or more: one ordinary slip plus a cheap one
 
+    # A real English word (one in the frequency list) is treated as a typo only when the shop
+    # word it resembles is this many times more common. Shop words missing from the list
+    # (brand names) count as `shop_floor_count` corpus uses.
+    real_word_ratio: float = 100.0
+    shop_floor_count: int = 5_000_000
+
     channel_weight: float = 2.0       # how strongly the channel outweighs the word prior
     min_margin: float = 0.5           # the best candidate must beat the runner-up by this
+
+
+@dataclass(frozen=True)
+class UnknownConfig:
+    """Constraints we cannot represent: unknown brand, size, colour or style (Stage 7b)."""
+
+    enabled: bool = True
+    min_length: int = 3                # shorter words are never flagged ("uk", "xl", "rs")
+    stopword_rank: int = 300           # words among the 300 most common English words are function words
+
+    # Structure words, as the cue sets in the lexicon are. A word after a brand cue that nothing
+    # explains and that looks like a name is an unknown brand.
+    brand_cues: Tuple[str, ...] = ("from", "by", "brand", "only")
+    brand_postfix: Tuple[str, ...] = ("brand", "ka", "ki", "ke", "wala", "wali")
+    # A capitalised word after these is a day, an event or a place, not a brand ("for Diwali").
+    not_a_name_after: Tuple[str, ...] = ("for", "on", "this", "next", "at", "till", "until",
+                                         "before", "after", "every", "each", "during")
+    # A name more common than this in English text is an ordinary word (days, months, cities:
+    # friday is rank 914, december 384), not a brand (nike 5380, adidas 7266, puma 12123).
+    name_min_rank: int = 2000
 
 
 @dataclass(frozen=True)
@@ -153,6 +176,7 @@ class Config:
     risk: RiskConfig = field(default_factory=RiskConfig)
     learned: LearnedRiskConfig = field(default_factory=LearnedRiskConfig)
     spelling: SpellingConfig = field(default_factory=SpellingConfig)
+    unknown: UnknownConfig = field(default_factory=UnknownConfig)
 
 
 DEFAULT_CONFIG = Config()
