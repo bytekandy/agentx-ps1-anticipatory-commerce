@@ -142,6 +142,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
     """Read the words so far into a snapshot. `final=True` marks the end of the request."""
     cfg = config.state
     reading = read_words(tokens, lexicon, config, final=final)
+    tokens = reading.tokens            # spell-corrected: "sorey" is the marker "sorry", "saiz" a cue
     mentions = sorted(reading.mentions, key=lambda m: m.start)
     markers = find_markers(tokens)
 

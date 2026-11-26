@@ -108,8 +108,13 @@ class LexiconTest(unittest.TestCase):
         self.assertMatch("kesar loom brand", "brand", "Kesar Loom", length=2)
         self.assertMatch("hooded sweatshirt", "category", "hoodies", length=2)
 
-    def test_a_phrase_never_crosses_a_clause_end(self):
-        m = first_match(self.lex, "navy, blue")
+    def test_a_known_phrase_survives_a_comma_inside_it(self):
+        for text, value in (("navy, blue", "navy"), ("extra, large", "XL"), ("t, shirt", "t-shirts")):
+            m = first_match(self.lex, text)
+            self.assertEqual((m.value, m.length), (value, 2), text)
+
+    def test_two_separate_values_are_not_merged_by_a_comma(self):
+        m = first_match(self.lex, "navy, black")
         self.assertEqual((m.value, m.length), ("navy", 1))
 
     def test_whole_tokens_only(self):
