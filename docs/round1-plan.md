@@ -93,8 +93,8 @@ agentx1_hack/                      monorepo root (git repo, branch main)
 2. **Commit on the stage branch** in small Conventional Commits.
 3. **When the stage's exit criteria are met:** fetch, rebase on `origin/main` (normally a no-op), run the merge gate, push, and open a pull request into `main` with `gh pr create`. The PR body has: summary, files added or changed, exit-criteria checklist, how it was verified. No Claude attribution lines.
 4. **Merge gate (every PR):** unit tests green; `python evaluate.py --agent agent.py` runs (from Stage 5 on); no kit file touched; no generated or local files committed; `main` stays working.
-5. **Claude merges its own PR** (squash and merge, so `main` stays linear, with the PR title as the commit message) once the merge gate is green and the exit criteria are met. The user is asked only when there is a merge conflict, a failing check that cannot be fixed cleanly, or an important decision that is theirs to make.
-6. **Next stage starts only after the previous PR is merged**, branching from the updated `main`. No stacked or parallel stage branches unless the user asks; if the previous PR is still open, ask first.
+5. **Claude opens the PR and stops.** It never merges on its own initiative and does no further work while any PR is open: no new branch, no code, no docs. The user reviews the PR and may ask for changes (Claude makes them on the same branch and pushes). The user then replies either **"start the next stage"** (they merged it themselves) or **"merge and start the next stage"** (Claude squash-merges the PR with its title as the commit message, syncs `main`, deletes the branch, then starts). If the user says "start the next stage" while the PR is still open, Claude asks whether to merge it first.
+6. **Next stage starts only after the previous PR is merged**, branching from the updated `main`. No stacked or parallel stage branches unless the user asks.
 
 **How we avoid merge conflicts**
 - **Sequential stages, short-lived branches.** Conflicts need two lines of work touching the same lines; with one stage at a time and `main` always current, there is nothing to conflict with.
