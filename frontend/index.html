@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anticipatory commerce agent</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Anticipatory commerce agent</h1>
+  <nav>
+    <button data-tab="live" class="on">Agent</button>
+    <button data-tab="results">Results</button>
+  </nav>
+  <div class="settings">
+    <label>Agent
+      <select id="agent"><option>hybrid</option><option>heuristic</option><option>learned</option></select>
+    </label>
+    <label>API key <input id="key" type="password" placeholder="only if the server needs one" autocomplete="off"></label>
+  </div>
+</header>
+
+<main id="tab-live">
+  <section class="input">
+    <h2>Say what you want, one word at a time</h2>
+    <textarea id="text" rows="2" placeholder="black running shoes size nine, under two thousand..." autofocus></textarea>
+    <p class="hint">Each word is sent when you type a space. Words already sent cannot be changed (the agent cannot take a word back): to correct yourself, say it, like "black, no wait, white".</p>
+    <div class="row">
+      <button id="finish" class="primary">Finish</button>
+      <button id="reset">New request</button>
+      <span class="sep"></span>
+      <select id="example"><option value="">Replay a dev request...</option></select>
+      <label>speed <input id="delay" type="range" min="0" max="1200" value="450"></label>
+      <button id="replay">Replay</button>
+    </div>
+    <p id="status" class="status"></p>
+  </section>
+
+  <section class="words"><h2>Words</h2><div id="chips" class="chips"></div></section>
+
+  <section class="reading">
+    <h2>What the agent understood</h2>
+    <div id="slots" class="slots"></div>
+    <div class="meter"><span>confidence</span><div class="bar"><i id="conf"></i></div><b id="confnum">0.00</b></div>
+    <div id="flags" class="flags"></div>
+    <p id="reason" class="reason"></p>
+    <p id="risk" class="risk"></p>
+  </section>
+
+  <section class="answer">
+    <h2>Answer</h2>
+    <div id="commit" class="card empty">No commit yet. The agent waits until it is sure.</div>
+    <div id="final" class="card empty">The final answer appears when the request is finished.</div>
+    <div id="evaluation" class="card hidden"></div>
+  </section>
+</main>
+
+<main id="tab-results" class="hidden">
+  <section>
+    <h2>Results on the public dev set</h2>
+    <select id="set"><option>dev</option><option>dev_extra</option></select>
+    <div id="results"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
