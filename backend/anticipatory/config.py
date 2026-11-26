@@ -5,6 +5,7 @@ logic modules contain no magic numbers. Later stages append blocks (slots, state
 `Config`; they do not edit existing ones.
 """
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -112,12 +113,23 @@ class RiskConfig:
 
 
 @dataclass(frozen=True)
+class LearnedRiskConfig:
+    """The learned risk model (Stage 6)."""
+
+    # Multiplies the model's probability. Above 1 makes the agent more cautious than the model
+    # says; it is the safety margin for the gap between synthetic training data and real requests.
+    # None means "use the multiplier the trainer chose and stored in the model file".
+    safety_multiplier: Optional[float] = None
+
+
+@dataclass(frozen=True)
 class Config:
     vocab: VocabConfig = field(default_factory=VocabConfig)
     slots: SlotConfig = field(default_factory=SlotConfig)
     state: StateConfig = field(default_factory=StateConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
+    learned: LearnedRiskConfig = field(default_factory=LearnedRiskConfig)
 
 
 DEFAULT_CONFIG = Config()
