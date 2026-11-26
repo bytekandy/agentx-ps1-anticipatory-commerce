@@ -12,7 +12,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 
 aside{width:250px;flex:none;border-right:1px solid var(--line);padding:20px 16px;display:flex;flex-direction:column;gap:18px;overflow:auto}
 .brand{font-size:22px;font-weight:600;letter-spacing:-.02em}.brand small{display:block;font-weight:400}
-aside button,aside select,aside input[type=password]{width:100%;background:none;border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer}
+aside button{width:100%;background:none;border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer}
 aside button:hover,aside select:hover{border-color:var(--fg)}
 button.solid{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:500}
 aside button.solid:hover{background:#ddd}
@@ -67,4 +67,12 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh}
 table{border-collapse:collapse;width:100%;margin:12px 0 20px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #set{width:160px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px}
+.tweaks{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px}
+.tweaks select,.tweaks input[type=password]{background:#000;border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:170px}
+.tweaks select:hover{border-color:var(--fg)}
+.tweaks input[type=range]{accent-color:#fff;width:150px}
+.tweaks label b{color:var(--fg);font-weight:500}
+.tweaks button{border:1px solid var(--fg);background:none;border-radius:8px;padding:6px 14px;cursor:pointer}
+.tweaks button:hover{background:var(--fg);color:var(--bg)}
+details{font-size:13px;color:var(--dim)}summary{cursor:pointer;padding:6px 0}
 @media(max-width:760px){body{flex-direction:column}aside{width:auto;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap}main{height:auto;min-height:70vh}}

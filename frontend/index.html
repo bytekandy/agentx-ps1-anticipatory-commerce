@@ -14,19 +14,6 @@
     <button data-tab="live" class="on">Agent</button>
     <button data-tab="results">Results</button>
   </nav>
-  <div class="group">
-    <span class="cap">REPLAY</span>
-    <select id="example"><option value="">Pick a dev request...</option></select>
-    <label>speed <input id="delay" type="range" min="0" max="1200" value="450"></label>
-    <button id="replay">Replay</button>
-  </div>
-  <div class="group">
-    <span class="cap">SETTINGS</span>
-    <label>Agent
-      <select id="agent"><option>hybrid</option><option>heuristic</option><option>learned</option></select>
-    </label>
-    <label>API key <input id="key" type="password" placeholder="only if needed" autocomplete="off"></label>
-  </div>
 </aside>
 
 <main id="tab-live">
@@ -58,6 +45,27 @@
     <div class="box">
       <textarea id="text" rows="2" placeholder="black running shoes size nine, under two thousand..." autofocus></textarea>
       <button id="finish" class="solid">Finish</button>
+    </div>
+    <div class="tweaks">
+      <label title="How the agent decides when to commit">Mode
+        <select id="agent">
+          <option value="hybrid">Hybrid (recommended)</option>
+          <option value="heuristic">Rules only</option>
+          <option value="learned">Learned model only</option>
+        </select>
+      </label>
+      <label title="Replays one of the public dev requests word by word, and scores it">Replay a sample
+        <select id="example"><option value="">Pick a sample request...</option></select>
+      </label>
+      <label title="Pause between words while replaying">Pause per word: <b id="delaynum">450 ms</b>
+        <input id="delay" type="range" min="0" max="1200" step="50" value="450">
+      </label>
+      <button id="replay">Replay</button>
+      <details><summary>Advanced</summary>
+        <label>API key (only if the server was started with one)
+          <input id="key" type="password" autocomplete="off">
+        </label>
+      </details>
     </div>
     <p class="hint">A word is sent when you type a space and cannot be taken back. To correct yourself, say it: "black, no wait, white".</p>
   </footer>

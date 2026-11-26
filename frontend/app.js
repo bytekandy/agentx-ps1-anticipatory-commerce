@@ -135,6 +135,7 @@ function replay() {
   es.addEventListener("done", () => es.close());
   es.onerror = () => { if (es.readyState === EventSource.CLOSED) return; es.close(); say("Replay failed (server not running, or a wrong API key)."); };
 }
+$("delay").addEventListener("input", () => { $("delaynum").textContent = $("delay").value + " ms"; });
 $("replay").addEventListener("click", replay);
 
 async function loadExamples() {
@@ -142,7 +143,7 @@ async function loadExamples() {
     const q = k => fetch(url("/api/examples", {set: "dev", tag: k, limit: 6})).then(r => r.json());
     const groups = await Promise.all([["plain", "plain"], ["correction", "with a correction"], ["late_constraint", "late constraint"], ["code_mixed", "Hindi-English"]]
       .map(async ([k, label]) => [label, (await q(k)).items]));
-    $("example").innerHTML = '<option value="">Pick a dev request...</option>' + groups.filter(([, items]) => items)
+    $("example").innerHTML = '<option value="">Pick a sample request...</option>' + groups.filter(([, items]) => items)
       .map(([label, items]) => `<optgroup label="${label}">${items.map(i => `<option value="${i.id}">${esc(i.text.slice(0, 70))}</option>`).join("")}</optgroup>`).join("");
   } catch (_) {}
 }
