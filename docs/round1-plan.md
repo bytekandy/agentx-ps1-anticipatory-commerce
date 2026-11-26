@@ -224,6 +224,7 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - Voice demo through browser speech-to-text feeding words to the backend.
 - Wasted-search limit exposed as a setting in the UI.
 - Fresh hidden-set robustness; latency and cost numbers; live jury test practice; 10-minute pitch.
+- **Soft lexicon (user decision 2026-11-26, after the Stage 6 audit of hand-written words):** the synonym tables in `lexicon.py` (about 90 phrases, part read off dev, part guessed) are an honest seed list, not a solution. After Round 1 replace or back them with pretrained word vectors: an unknown word ("trainers") maps to its nearest category by meaning, as a lower-trust fallback behind the exact and seed matches (option C: keep the seed list as the high-trust layer). Needs an external vector file (a trimmed GloVe or fastText subset shipped as small JSON), so check size and licence first.
 - Hybrid extras if not done earlier: a probability over candidate products (technique C) and a soft lexicon from pretrained word vectors (technique E).
 - LLM reader only if the user decides to add one.
 - This stage may split into several branches once the finals details are known.
