@@ -51,6 +51,7 @@ Run the stream interface the UI will talk to. It is optional and uses well-known
 pip install -r requirements-server.txt   # once
 python -m server                         # http://127.0.0.1:8765 (this machine only), docs at /docs
 python -m server --static ../frontend    # also serves the web page at http://127.0.0.1:8765/
+python scripts/ask.py "beige Loomsy sneakers size 10 under 3000"   # ask the agent in the terminal, no server needed
 python scripts/learn_lexicon.py log.jsonl                  # teach the agent words from logged requests (optional)
 python scripts/stream_client.py --live "beige Loomsy sneakers size 10 under 3000"      # WebSocket
 python scripts/stream_client.py --rest "beige Loomsy sneakers size 10 under 3000"      # stateless POSTs

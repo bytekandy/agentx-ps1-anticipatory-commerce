@@ -174,5 +174,30 @@ class KitIntegrationTest(unittest.TestCase):
         self.assertLess(self.summary["searches"], 1.5)
 
 
+
+class AskScriptTest(unittest.TestCase):
+    """`scripts/ask.py`: the terminal way to talk to the agent, with no server."""
+
+    def run_ask(self, text, agent="hybrid"):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        import ask
+        lines = []
+        ask.ask(text, agent, out=lines.append)
+        return "\n".join(lines)
+
+    def test_a_request_prints_a_line_per_word_and_a_final_answer(self):
+        text = "hi, I want Loomsy navy blue casual sneakers within forty five hundred, size 7 if you have it"
+        out = self.run_ask(text)
+        self.assertIn("COMMIT after word", out)
+        self.assertIn("Final answer: Loomsy Suede 4 Sneakers, Navy", out)
+
+    def test_every_agent_variant_runs_and_an_empty_request_is_refused_politely(self):
+        for name in ("hybrid", "heuristic", "learned"):
+            self.assertIn("Final answer:", self.run_ask("black running shoes size 9", name))
+        self.assertEqual(self.run_ask("   "), "Nothing to ask.")
+
+
 if __name__ == "__main__":
     unittest.main()
