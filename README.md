@@ -34,7 +34,10 @@ Score our agent on the dev set:
 
 ```
 python evaluate.py --agent agent.py
+python evaluate.py --agent agent_learned.py   # same agent with the learned risk model
 ```
+
+Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`.
 
 Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`):
 

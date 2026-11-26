@@ -172,12 +172,12 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** those files, `backend/tests/test_policy.py`, `backend/tests/test_agent.py`; adds a policy block to `config.py`.
 - **Exit:** `python evaluate.py --agent agent.py` runs; accuracy at or above baseline; zero wrong commits on the plain subset; score above 20. The score and per-tag table are recorded as the baseline for the hybrid comparison in Stage 6.
 
-### Stage 6 - Learned risk model (hybrid) - `stage-6/risk-model` - todo
+### Stage 6 - Learned risk model (hybrid) - `stage-6/risk-model` - done (on merge)
 - A calibrated model that answers "how likely is the current best product to be wrong?" and replaces `HeuristicRisk` behind the same `RiskModel` interface (technique B; the commit rule is technique A from Stage 5).
 - `scripts/make_training_data.py`: synthetic requests generated from `catalogue.csv` with templates and noise rates mined from dev (corrections about 18 percent, markers, number phrasing, fillers, late constraints), replayed word by word through `FilterState`; every prefix is labelled "is the current unique candidate the final target?". `dev.jsonl` is never training data: it is the held-out check.
-- `scripts/train_risk.py`: pure-Python logistic regression with calibration (Platt or isotonic); writes `backend/anticipatory/data/risk_model.json`. `risk.py` gains a standard-library-only `LearnedRisk` that loads it.
-- Safety rule: the learned model may only make the agent more cautious than the rule floor (`max` of the two risks), never less.
-- **Owns:** `backend/scripts/make_training_data.py`, `backend/scripts/train_risk.py`, `backend/anticipatory/data/risk_model.json`, `backend/tests/test_risk.py`; extends `risk.py`; adds a risk block to `config.py`.
+- `scripts/train_risk.py`: pure-Python logistic regression (Newton's method, ridge), refitted on-policy (only the prefixes the agent would actually visit, because the first safe-looking prefix is the riskiest); writes `backend/anticipatory/data/risk_model.json`. `risk.py` gains a standard-library-only `LearnedRisk` that loads it. The safety multiplier is chosen on synthetic validation requests as the smallest one whose wrong-commit rate is no higher than the heuristic's, so the model must win on earliness at equal safety and dev stays untouched.
+- Safety rule: an unsettled state is never safe whatever the model says. `agent.py` keeps the heuristic as the default; `agent_learned.py` selects the learned model. (An ensemble that takes the more cautious of the two was measured and rejected: 0 wrong on dev but only 41.2.)
+- **Owns:** `backend/scripts/make_training_data.py`, `backend/scripts/train_risk.py`, `backend/anticipatory/data/risk_model.json`, `backend/agent_learned.py`, `backend/tests/test_risk.py`, `backend/tests/test_training.py`; extends `risk.py` (new `RiskInput` fields and `LearnedRisk`); adds a learned-risk block to `config.py`; two small reader fixes in `slots.py` found by the generator round trip.
 - **Exit:** calibration error reported on dev (held out); wrong commits at or below the heuristic; score at or above the heuristic, per-tag table in the PR. If it does not beat the heuristic, the PR says so and the heuristic stays the default.
 
 ### Stage 7 - Noisy-channel spelling (hybrid) - `stage-7/spelling` - todo
