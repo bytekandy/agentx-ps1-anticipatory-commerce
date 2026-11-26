@@ -17,6 +17,8 @@ class VocabConfig:
     confidence_variant: float = 0.90    # plural, hyphen or spacing variant of such a word
     confidence_synonym: float = 0.85    # a synonym we listed ("slides" for sandals)
     confidence_fuzzy: float = 0.60      # a word that had to be spell-corrected (Stage 7)
+    confidence_learned: float = 0.60    # a word taught by earlier requests (learned_lexicon.json)
+    learned_min_count: int = 2          # evidence needed before a learned word is used
 
     # A number below this is not a price; above the maximum it is not a price either.
     min_price: int = 100

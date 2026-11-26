@@ -100,3 +100,6 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--fg);
 .top{gap:22px}
 .top .ghost,.top .solid{border:0;background:none;color:var(--fg);padding:4px 0;border-radius:0;text-decoration:underline;text-underline-offset:3px;font-weight:400;cursor:pointer}
 .top .ghost:hover,.top .solid:hover{text-decoration-thickness:2px}
+.accept{margin-top:10px;background:none;border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+.accept:hover:not(:disabled){border-color:var(--fg)}
+.accept:disabled{color:var(--dim);cursor:default}

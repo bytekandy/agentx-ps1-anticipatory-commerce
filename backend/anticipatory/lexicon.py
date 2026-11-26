@@ -206,7 +206,8 @@ def _spellings(parts: Sequence[str]) -> Set[Tuple[str, ...]]:
 
 class Lexicon:
     def __init__(self, rows: Iterable[Dict[str, str]], config: Optional[VocabConfig] = None,
-                 spelling: Optional[SpellingConfig] = None):
+                 spelling: Optional[SpellingConfig] = None,
+                 learned: Optional[Dict[str, Tuple[str, str]]] = None):
         rows = list(rows)
         self.config = config or DEFAULT_CONFIG.vocab
         self.categories: FrozenSet[str] = frozenset(r["category"] for r in rows)
@@ -225,6 +226,7 @@ class Lexicon:
         self.conflicts: List[Tuple[Tuple[str, ...], List[Tuple[str, str]]]] = []
         self._table: Dict[Tuple[str, ...], _Entry] = {}
         self._build()
+        self._add_learned(learned or {})
         self.known_words: FrozenSet[str] = frozenset(
             {w for key in self._table for w in key}
             | {w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS | LATE_WORDS
@@ -248,12 +250,29 @@ class Lexicon:
             "exact": self.config.confidence_exact,
             "variant": self.config.confidence_variant,
             "synonym": self.config.confidence_synonym,
+            "learned": self.config.confidence_learned,
         }
 
     @classmethod
     def from_catalogue(cls, path: Optional[Path] = None, config: Optional[VocabConfig] = None,
-                       spelling: Optional[SpellingConfig] = None) -> "Lexicon":
-        return cls(load_rows(path), config, spelling)
+                       spelling: Optional[SpellingConfig] = None,
+                       learned_path: Optional[Path] = None) -> "Lexicon":
+        """The lexicon of the catalogue, plus the words taught by earlier requests when a
+        learned-lexicon file exists (`learned.py`). Without that file nothing is added and a
+        word the lexicon cannot place is dropped, as before."""
+        from .learned import load_active
+        vocab = config or DEFAULT_CONFIG.vocab
+        return cls(load_rows(path), vocab, spelling, load_active(learned_path, vocab.learned_min_count))
+
+    def _add_learned(self, learned: Dict[str, Tuple[str, str]]) -> None:
+        """Taught words become phrases of kind "learned". They never replace a word the
+        catalogue or the seed synonyms already give a meaning to, and only name values that
+        exist in this shop."""
+        valid = {"category": self.categories, "colour": self.colours, "brand": self.brands}
+        for word, (slot, value) in learned.items():
+            key = tuple(word.lower().split())
+            if key and value in valid.get(slot, ()) and key not in self._table:
+                self._table[key] = _Entry(slot, value, "learned")
 
     def _word_weights(self, rows: Sequence[Dict[str, str]]) -> Dict[str, float]:
         """How common each word that names a product is: the prior of the spelling corrector.

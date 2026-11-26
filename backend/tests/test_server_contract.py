@@ -100,6 +100,7 @@ class EndpointsTest(unittest.TestCase):
         concrete = {"/api/info": None, "/api/health": None,
                     "/api/step": {"words": ["black"]}, "/api/answer": {"words": ["black"]},
                     "/api/run": {"words": ["black"]},
+                    "/api/feedback": {"words": ["black"], "product_id": "P0001"},
                     "/api/replay": None, "/api/examples": None, "/api/examples/{id}": None,
                     "/api/results/{set}": None}
         paths = {"/api/replay": "/api/replay?text=black&delay_ms=0", "/api/examples/{id}": "/api/examples/dev-0004",

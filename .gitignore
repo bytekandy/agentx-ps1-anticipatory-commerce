@@ -23,3 +23,4 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
+learned_lexicon.json

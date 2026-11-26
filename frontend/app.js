@@ -68,6 +68,19 @@ function showFinal(f) {
   const same = f.commit && f.commit.product_id === f.final_product_id;
   setCard("final", f.product, "Nothing matched.",
     `<div class="meta">${f.commit ? (same ? "same as the early commit" : "different from the early commit") : "no early commit"} · ${f.searches} search${f.searches === 1 ? "" : "es"}</div>`, "good");
+  if (f.final_product_id) {
+    const b = document.createElement("button"); b.className = "accept"; b.textContent = "This is what I wanted";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const r = await fetch(url("/api/feedback"), {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({words: $("text").value.trim().split(/\s+/), product_id: f.final_product_id})});
+        const learned = (await r.json()).learned || [];
+        b.textContent = learned.length ? "Remembered: " + learned.map(l => `${l.word} = ${l.value}`).join(", ") : "Thanks";
+      } catch (_) { b.textContent = "Could not send"; }
+    });
+    $("final").appendChild(b);
+  }
   if (f.evaluation) {
     const e = f.evaluation, ok = e.correct && e.wrong_commits === 0;
     const el = $("evaluation"); el.className = "card " + (ok ? "good" : "bad");
