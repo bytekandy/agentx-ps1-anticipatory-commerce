@@ -6,7 +6,7 @@ A shopping request arrives one word at a time, for example "black running shoes,
 
 ## Status
 
-The backend is complete for Round 1; the stream interface and the base UI come next (see `docs/round1-plan.md`). On the public dev set the agent scores **43.5** against the kit baseline's 20.0, with every final answer right and no wrong early commit. On 87 extra hand-written requests with phrasing the dev set does not contain (`backend/data/dev_extra.jsonl`) it scores 40.5 (accuracy 0.989) against the baseline's 31.3 (0.793). It uses about 1.5 ms of CPU per request, no model API, and only the Python standard library. The full numbers, per-tag tables and the cost figures are in [`backend/outputs/report.md`](backend/outputs/report.md), and the per-request output on the dev set, as the organisers ask for, is `backend/outputs/results.jsonl`.
+The backend and its stream interface are complete for Round 1; the base UI and the submission package come next (see `docs/round1-plan.md`). On the public dev set the agent scores **43.5** against the kit baseline's 20.0, with every final answer right and no wrong early commit. On 87 extra hand-written requests with phrasing the dev set does not contain (`backend/data/dev_extra.jsonl`) it scores 40.5 (accuracy 0.989) against the baseline's 31.3 (0.793). It uses about 1.5 ms of CPU per request, no model API, and only the Python standard library. The full numbers, per-tag tables and the cost figures are in [`backend/outputs/report.md`](backend/outputs/report.md), and the per-request output on the dev set, as the organisers ask for, is `backend/outputs/results.jsonl`.
 
 ## Repository layout
 
@@ -17,6 +17,7 @@ backend/     Python (standard library only): the agent and the Rezolve starter k
   anticipatory/   the agent package (see below)
   data/           our own extra test requests (dev_extra.jsonl)
   outputs/        results on dev and dev_extra, and the generated report
+  server/         a thin streaming interface over the agent, for the UI (HTTP, JSON, server-sent events)
   scripts/        analysis, training, report and test-data builders
   tests/          unit and scenario tests
 frontend/    base UI (added in a later stage)
@@ -42,6 +43,14 @@ python evaluate.py --agent agent.py
 python evaluate.py --agent agent.py --data data/dev_extra.jsonl   # 87 extra hand-written requests (unseen phrasing)
 python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference)
 python evaluate.py --agent agent_learned.py     # learned risk model only
+```
+
+Run the stream interface the UI will talk to (standard library only; the contract is [`docs/stream-contract.md`](docs/stream-contract.md)):
+
+```
+python -m server                      # http://127.0.0.1:8765, this machine only
+python scripts/stream_client.py --live "beige Loomsy sneakers size 10 under 3000"   # in another terminal
+python scripts/stream_client.py --replay-example dev-0004 --delay 300
 ```
 
 Regenerate the committed outputs (results on dev and dev_extra, and the report with per-tag tables and the cost and speed numbers; about 15 seconds; scoring is the organisers' own `evaluate.py`, imported unchanged):
