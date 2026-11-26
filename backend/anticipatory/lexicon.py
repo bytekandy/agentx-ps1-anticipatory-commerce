@@ -124,7 +124,7 @@ SIZE_CUES: FrozenSet[str] = frozenset({"size", "sz", "uk", "number", "waist"})
 # Words that often announce a correction (Stage 4 decides what they mean in context).
 CORRECTION_WORDS: FrozenSet[str] = frozenset({
     "oops", "whoops", "sorry", "actually", "wait", "meant", "mean", "rather", "matlab",
-    "nahi", "nahin", "instead", "change", "scratch", "no",
+    "nahi", "nahin", "instead", "change", "scratch", "no", "correction", "ignore", "disregard",
 })
 
 # Words that often open an afterthought ("and in navy", "oh, and size M").
@@ -134,6 +134,7 @@ LATE_WORDS: FrozenSet[str] = frozenset({"and", "also", "aur", "plus", "oh", "add
 # take them for one ("mere liye dress", "uh, navy shirt"). A small closed class, like the cue sets.
 FILLER_WORDS: FrozenSet[str] = frozenset({
     "uh", "um", "umm", "hmm", "hm", "er", "erm", "ah", "ok", "okay", "yeah",
+    "gimme", "lemme", "wanna", "gonna", "gotta", "plz", "pls", "yo", "bro", "dude", "kindly", "hii",
     "liye", "mere", "mujhe", "chahiye", "chahie", "dikhao", "dikha", "dikhana", "milega", "milegi",
     "hai", "hain", "kya", "aapke", "aapka", "paas", "bhaiya", "bhai", "yaar", "na",
     "wala", "wali", "wale", "ka", "ki", "ke", "ko", "se", "mein", "me", "baat", "kuch",
