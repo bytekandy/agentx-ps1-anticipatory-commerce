@@ -117,7 +117,7 @@ def latest_filters(mentions: Sequence[SlotMention], lexicon: Lexicon,
             filters[m.slot] = m.value
     category = filters["category"]
     for m in trusted:
-        if m.slot == "size" and _fits_category(str(m.value), category, lexicon):
+        if m.slot == "size" and size_fits_category(str(m.value), category, lexicon):
             filters["size"] = m.value
     return filters
 
@@ -138,8 +138,12 @@ def _size_cue_beside(tokens, start, end) -> bool:
     return before or after
 
 
-def _fits_category(size: str, category, lexicon: Lexicon) -> bool:
-    """Can this size belong to this category? Unknown category: anything goes."""
+def size_fits_category(size: str, category, lexicon: Lexicon) -> bool:
+    """Can this size belong to this category? Unknown category: anything goes.
+
+    A number size must be one of the category's sizes (9 for sandals, 32 for jeans) and a
+    category without sizes (backpacks, caps, ...) takes none.
+    """
     if category is None:
         return True
     if category in lexicon.unsized_categories:

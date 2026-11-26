@@ -7,4 +7,5 @@ Standard library only. Modules, from the bottom up:
     numbers     price and size numbers: digits, "3.5k", English and Hindi number words
     lexicon     vocabulary built from the catalogue, plus synonyms and cue words
     slots       slot mentions (category, colour, brand, size, prices) from the words so far
+    state       filter state: one belief per slot, revisions, pending corrections and numbers
 """
