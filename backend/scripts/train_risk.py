@@ -17,8 +17,9 @@ What it does
   4. Picks the safety multiplier by simulating the commit policy on fresh synthetic requests
      (score = 0.4 + 0.6 x earliness per right commit, -1.0 per wrong one): the smallest
      multiplier whose wrong-commit rate is no higher than the hand-coded heuristic's. The
-     learned model therefore has to win on earliness at equal safety. `dev.jsonl` stays an
-     untouched test.
+     policy simulated is the shipped one, `HybridRisk`: the heuristic's rules for fresh or
+     just-paused values, the learned model otherwise. The model therefore has to win on
+     earliness at equal safety. `dev.jsonl` stays an untouched test.
   5. Reports log-loss, Brier score, expected calibration error and AUC on fresh synthetic
      requests and on `dev.jsonl`, plus the simulated policy score of the learned model and of
      the hand-coded heuristic side by side.
@@ -259,8 +260,18 @@ def main():
           f"score {hand_val['score']:.2f}, earliness {hand_val['early_share']:.1%}")
     print("safety multiplier (validation, simulated policy):")
     multiplier = None
-    for m in (1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0):
-        sim = simulate(val_req, lambda r, m=m: predict(w, vector(r)) * m, budget)
+    hold = DEFAULT_CONFIG.risk.hold_words
+
+    def hybrid(m):
+        def risk(r):
+            learned = predict(w, vector(r)) * m
+            if r["quiet_words"] < hold or r["at_clause_end"]:
+                return max(heuristic.p_wrong(to_input(r)), learned)
+            return learned
+        return risk
+
+    for m in (1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0):
+        sim = simulate(val_req, hybrid(m), budget)
         ok = sim["wrong_rate"] <= hand_val["wrong_rate"]
         print(f"  x{m:<5} score {sim['score']:.2f}  wrong {sim['wrong']:4d} "
               f"({sim['wrong_rate']:.2%})  earliness {sim['early_share']:.1%}"
@@ -270,13 +281,14 @@ def main():
     multiplier = multiplier or 4.0
     print(f"chosen multiplier: x{multiplier}")
 
-    print("\nsimulated policy, model vs hand-coded heuristic:")
+    print("\nsimulated policy: heuristic vs learned alone vs hybrid (the shipped design):")
     for label, reqs in (("validation", val_req), ("dev (held out)", dev_req)):
-        learned = simulate(reqs, lambda r: predict(w, vector(r)) * multiplier, budget)
-        hand = simulate(reqs, lambda r: heuristic.p_wrong(to_input(r)), budget)
-        print(f"  {label:<15} learned: score {learned['score']:.2f} wrong {learned['wrong']} "
-              f"early {learned['early_share']:.1%}   heuristic: score {hand['score']:.2f} "
-              f"wrong {hand['wrong']} early {hand['early_share']:.1%}")
+        for name, fn in (("heuristic", lambda r: heuristic.p_wrong(to_input(r))),
+                         ("learned", lambda r: predict(w, vector(r)) * multiplier),
+                         ("hybrid", hybrid(multiplier))):
+            sim = simulate(reqs, fn, budget)
+            print(f"  {label:<15}{name:<10} score {sim['score']:.2f}  wrong {sim['wrong']:3d}  "
+                  f"earliness {sim['early_share']:.1%}")
 
     report("validation (fresh synthetic, all prefixes)", group(flatten(val_req)), w, budget)
     report("dev.jsonl (real, held out, all prefixes)", group(flatten(dev_req)), w, budget)

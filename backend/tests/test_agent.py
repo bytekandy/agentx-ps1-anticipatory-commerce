@@ -154,6 +154,22 @@ class KitIntegrationTest(unittest.TestCase):
         plain = [r for r in self.results if not r["tags"]]
         self.assertEqual(sum(r["wrong_commits"] for r in plain), 0)
 
+    def test_the_rules_only_variant_is_also_safe(self):
+        import agent_heuristic
+        with open(DEV_PATH, encoding="utf-8") as fh:
+            requests = [json.loads(line) for line in fh if line.strip()]
+        results, _ = evaluate.run(agent_heuristic.Agent, requests)
+        summary = evaluate.summarise(results)
+        self.assertEqual(summary["wrong_commits"], 0)
+        self.assertGreater(summary["score"], 40.0)
+
+    def test_the_hybrid_default_is_at_least_as_good_as_the_rules_only_agent(self):
+        import agent_heuristic
+        with open(DEV_PATH, encoding="utf-8") as fh:
+            requests = [json.loads(line) for line in fh if line.strip()]
+        rules, _ = evaluate.run(agent_heuristic.Agent, requests)
+        self.assertGreaterEqual(self.summary["score"], evaluate.summarise(rules)["score"])
+
     def test_searches_stay_lean(self):
         self.assertLess(self.summary["searches"], 1.5)
 

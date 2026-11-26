@@ -176,3 +176,27 @@ class LearnedRisk:
         if not features.settled:
             return self.config.risk.unsettled_risk
         return min(1.0, self.probability(features) * self.multiplier)
+
+
+class HybridRisk:
+    """The hand-coded rules while the state is fresh, the learned model once it is calm.
+
+    A value that was only just heard (`quiet_words < hold_words`), or one the shopper paused
+    after (a comma or period), is where corrections start, and no feature tells a correction
+    from a calm continuation there. These states keep the heuristic's deliberate caution. In a
+    calm state (a word or more has passed, no pause) the learned model decides, and it can
+    commit earlier than a flat rule would: it weighs how complete the request looks, how
+    sure each slot is and whether a correction has already happened.
+    """
+
+    def __init__(self, learned: LearnedRisk, config: Config = DEFAULT_CONFIG):
+        self.learned = learned
+        self.rules = HeuristicRisk(config)
+        self.hold_words = config.risk.hold_words
+
+    def p_wrong(self, features: RiskInput) -> float:
+        if not features.settled:
+            return self.rules.p_wrong(features)             # never safe, whatever the model says
+        if features.quiet_words < self.hold_words or features.at_clause_end:
+            return max(self.rules.p_wrong(features), self.learned.p_wrong(features))
+        return self.learned.p_wrong(features)

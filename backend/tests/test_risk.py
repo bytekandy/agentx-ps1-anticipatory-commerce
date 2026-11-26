@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 
 from anticipatory.config import Config, LearnedRiskConfig
-from anticipatory.risk import (DEFAULT_MODEL_PATH, FEATURE_NAMES, HeuristicRisk, LearnedRisk,
-                               RiskInput, risk_features, sigmoid)
+from anticipatory.risk import (DEFAULT_MODEL_PATH, FEATURE_NAMES, HeuristicRisk, HybridRisk,
+                               LearnedRisk, RiskInput, risk_features, sigmoid)
 
 
 def features(**kw):
@@ -91,6 +91,41 @@ class LearnedRiskTest(unittest.TestCase):
         self.assertEqual(data["features"], list(FEATURE_NAMES))
         self.assertEqual(len(data["weights"]), len(FEATURE_NAMES))
         self.assertLess(DEFAULT_MODEL_PATH.stat().st_size, 5000)
+
+
+class HybridRiskTest(unittest.TestCase):
+    """The rules keep control of fresh and just-paused states; the model decides calm ones."""
+
+    class Fixed:
+        def __init__(self, value):
+            self.value = value
+
+        def p_wrong(self, features):
+            return self.value
+
+    def hybrid(self, learned_value):
+        hybrid = HybridRisk(LearnedRisk.from_file())
+        hybrid.learned = self.Fixed(learned_value)
+        return hybrid
+
+    def test_a_fresh_value_keeps_the_rules_caution_even_if_the_model_says_safe(self):
+        risk = self.hybrid(0.0).p_wrong(features(quiet_words=0))
+        self.assertEqual(risk, HeuristicRisk().p_wrong(features(quiet_words=0)))
+        self.assertGreater(risk, 0.04)
+
+    def test_a_pause_keeps_the_rules_caution(self):
+        self.assertGreater(self.hybrid(0.0).p_wrong(features(at_clause_end=True)), 0.04)
+
+    def test_a_calm_state_is_left_to_the_model(self):
+        calm = features(quiet_words=3, at_clause_end=False)
+        self.assertEqual(self.hybrid(0.01).p_wrong(calm), 0.01)
+        self.assertEqual(self.hybrid(0.3).p_wrong(calm), 0.3)
+
+    def test_a_cautious_model_also_blocks_a_fresh_state(self):
+        self.assertEqual(self.hybrid(1.0).p_wrong(features(quiet_words=0)), 1.0)
+
+    def test_unsettled_is_never_safe_even_when_calm(self):
+        self.assertEqual(self.hybrid(0.0).p_wrong(features(quiet_words=5, settled=False)), 1.0)
 
 
 class HeuristicStillDefaultTest(unittest.TestCase):
