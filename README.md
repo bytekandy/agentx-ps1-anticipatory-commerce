@@ -30,11 +30,12 @@ python evaluate.py                    # score the kit's baseline on dev.jsonl
 python search.py white Pacevo sneakers  # try the local catalogue search
 ```
 
-Score our agent on the dev set:
+Score our agent on the dev set (`agent.py` is the hybrid: hand-coded rules for fresh values, a learned risk model for calm states):
 
 ```
 python evaluate.py --agent agent.py
-python evaluate.py --agent agent_learned.py   # same agent with the learned risk model
+python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference)
+python evaluate.py --agent agent_learned.py     # learned risk model only
 ```
 
 Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`.
