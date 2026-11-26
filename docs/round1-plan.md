@@ -158,9 +158,9 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/anticipatory/slots.py`, `backend/tests/test_slots.py`, `backend/scripts/slot_accuracy.py`; adds a slots block to `config.py`.
 - **Exit:** unit tests green; slot accuracy on plain dev requests at or above 95% (measured with a small script over `dev.jsonl` gold filters, without an agent).
 
-### Stage 4 - Filter state and corrections - `stage-4/filter-state` - todo
+### Stage 4 - Filter state and corrections - `stage-4/filter-state` - done (on merge)
 - `state.py`: incremental `FilterState` (values, confidences, revision history); correction markers; cooldown after a revision; late constraints added without losing earlier slots.
-- **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`; adds a state block to `config.py`.
+- **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`, `backend/scripts/state_replay.py`; adds a state block to `config.py`; makes `size_fits_category` public in `slots.py` (a rename).
 - **Exit:** unit tests green; replaying dev requests word by word gives the gold filters at the last word for at least 95% of plain and correction requests.
 
 ### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - todo
