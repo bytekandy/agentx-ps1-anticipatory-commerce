@@ -136,7 +136,7 @@ def latest_filters(mentions: Sequence[SlotMention], lexicon: Lexicon,
                    config: Config = DEFAULT_CONFIG) -> Dict[str, object]:
     """A naive reading: for each slot, the last trusted and complete mention wins.
 
-    Used to measure extraction on its own (`scripts/slot_accuracy.py`). It does not understand
+    Used to measure extraction on its own (`scripts/check_reader.py slots`). It does not understand
     corrections or afterthoughts; Stage 4's filter state replaces it. The keys match the
     `filters` of a dev request; `min_price` appears only when the request has one.
     """

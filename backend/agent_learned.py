@@ -5,7 +5,7 @@ Same agent as `agent.py`, but the commit policy asks the logistic-regression ris
 It scores higher on dev but makes wrong commits on corrections; see `docs/round1-plan.md`.
 """
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import ToolsCatalog
+from anticipatory.policy import ToolsCatalog
 from anticipatory.risk import LearnedRisk
 
 

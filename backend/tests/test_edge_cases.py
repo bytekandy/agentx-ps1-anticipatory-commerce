@@ -7,7 +7,7 @@ import time
 import unittest
 
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import InMemoryCatalog
+from anticipatory.policy import InMemoryCatalog
 from anticipatory.config import Config, StateConfig
 from anticipatory.lexicon import Lexicon, load_rows
 from anticipatory.risk import HybridRisk, LearnedRisk

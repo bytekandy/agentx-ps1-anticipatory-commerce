@@ -9,7 +9,7 @@ calm. `agent_heuristic.py` (rules only) and `agent_learned.py` (model only) are 
 variants, kept for comparison.
 """
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import ToolsCatalog
+from anticipatory.policy import ToolsCatalog
 from anticipatory.risk import HybridRisk, LearnedRisk
 
 

@@ -34,8 +34,7 @@ from dataclasses import replace
 from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .config import DEFAULT_CONFIG, SpellingConfig
-from .tokens import Token
-from .words import EnglishWords, english_words
+from .tokens import EnglishWords, Token, english_words
 
 _ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
 
