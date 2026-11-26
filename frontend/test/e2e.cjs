@@ -39,6 +39,9 @@ let failed = 0; const check = (name, ok, detail = "") => { console.log((ok ? "PA
   check("replay reaches the end", $("final").textContent.length > 20 && !$("final").classList.contains("empty"), $("final").textContent);
   check("replay is scored", /Right answer/.test($("evaluation").textContent), $("evaluation").textContent);
   check("replay filled the text box", $("text").value.length > 10);
+  // light mode toggles and is remembered
+  $("themebtn").click(); check("light mode on", w.document.documentElement.dataset.theme === "light" && $("themebtn").textContent === "Dark mode");
+  $("themebtn").click(); check("dark mode back", w.document.documentElement.dataset.theme === "dark");
   // results tab
   w.HTMLDialogElement.prototype.showModal = w.HTMLDialogElement.prototype.showModal || function () { this.setAttribute("open", ""); };   // jsdom lacks it
   $("resultsbtn").click(); await sleep(1200);
