@@ -286,9 +286,14 @@ class FilterState:
         self.snapshot = build_snapshot(self.tokens, self.lexicon, self.config)
 
     def push(self, word: str) -> Snapshot:
-        """Take the next word of the request and return the new snapshot."""
+        """Take the next word of the request and return the new snapshot.
+
+        Past `max_live_words` the snapshot is no longer refreshed (see `StateConfig`): a request
+        that long gets no early commit, but `finish()` still reads all of it.
+        """
         self.tokens.append(make_token(word))
-        self.snapshot = build_snapshot(self.tokens, self.lexicon, self.config)
+        if len(self.tokens) <= self.config.state.max_live_words:
+            self.snapshot = build_snapshot(self.tokens, self.lexicon, self.config)
         return self.snapshot
 
     def finish(self) -> Snapshot:
