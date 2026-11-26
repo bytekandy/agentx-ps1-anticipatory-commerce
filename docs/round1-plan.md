@@ -153,9 +153,9 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/anticipatory/{__init__,config,tokens,numbers,lexicon}.py`, `backend/tests/{__init__,test_tokens,test_numbers,test_lexicon}.py`.
 - **Exit:** unit tests green; every catalogue value and all dev synonyms resolve.
 
-### Stage 3 - Slot extraction - `stage-3/slot-extraction` - todo
+### Stage 3 - Slot extraction - `stage-3/slot-extraction` - done (on merge)
 - `slots.py`: pure per-word extraction of category, colour, brand, size, budget, with confidences.
-- **Owns:** `backend/anticipatory/slots.py`, `backend/tests/test_slots.py`; adds a slots block to `config.py`.
+- **Owns:** `backend/anticipatory/slots.py`, `backend/tests/test_slots.py`, `backend/scripts/slot_accuracy.py`; adds a slots block to `config.py`.
 - **Exit:** unit tests green; slot accuracy on plain dev requests at or above 95% (measured with a small script over `dev.jsonl` gold filters, without an agent).
 
 ### Stage 4 - Filter state and corrections - `stage-4/filter-state` - todo
