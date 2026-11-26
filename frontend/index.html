@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anticipatory commerce agent</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">AgentX<small>ANTICIPATORY COMMERCE</small></div>
+  <div class="top">
+    <div class="pop keybox">
+      <button class="ghost" data-pop="keypop">API key</button>
+      <div class="menu right" id="keypop">
+        <p><b>Only needed if the server asks for one.</b> A key is required when the server is started with <code>--api-key</code>, which is mandatory if it can be reached from other machines. On your own computer (localhost) leave this empty.</p>
+        <input id="key" type="password" placeholder="paste key" autocomplete="off">
+      </div>
+    </div>
+    <button id="resultsbtn" class="solid">Results</button>
+  </div>
+</header>
+
+<main id="tab-live">
+  <div class="thread">
+    <section class="hero">
+      <h1>Your shopping conductor.</h1>
+      <p>Say what you want, one word at a time. The agent commits as soon as it is sure.</p>
+    </section>
+
+    <div class="turn me"><span class="who">YOU</span><div id="chips" class="chips"></div></div>
+
+    <div class="turn bot reply">
+      <span class="who">AGENT</span>
+      <div class="body">
+        <div id="slots" class="slots"></div>
+        <div class="meter"><span>confidence</span><div class="bar"><i id="conf"></i></div><b id="confnum">0.00</b></div>
+        <div id="flags" class="flags"></div>
+        <p id="reason" class="reason"></p>
+        <p id="risk" class="risk"></p>
+        <div id="commit" class="card empty"></div>
+        <div id="final" class="card empty"></div>
+        <div id="evaluation" class="card hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="composer">
+    <p id="status" class="status"></p>
+    <div class="box">
+      <button id="plus" class="icon" title="New query" aria-label="New query">+</button>
+      <textarea id="text" rows="1" placeholder="Say what you want, e.g. black running shoes size nine, under two thousand..." autofocus></textarea>
+      <input type="hidden" id="example" value="">
+      <input type="hidden" id="agent" value="hybrid">
+      <div class="pop">
+        <button class="chip2" data-pop="samplepop">Samples <i class="car"></i></button>
+        <div class="menu up" id="samplepop">
+          <div id="samples" class="scroll"></div>
+          <div class="foot"><span>Pause per word</span><b id="delaynum">450 ms</b>
+            <input id="delay" type="range" min="0" max="1200" step="50" value="450"></div>
+        </div>
+      </div>
+      <div class="pop">
+        <button class="chip2" data-pop="modelpop"><span id="modelname">Hybrid</span> <i class="car"></i></button>
+        <div class="menu up" id="modelpop">
+          <button class="item on" data-v="hybrid" data-n="Hybrid"><span><b>Hybrid</b><i>Rules while unsure, learned model once settled. Recommended</i></span><em>&#10003;</em></button>
+          <button class="item" data-v="heuristic" data-n="Rules"><span><b>Rules only</b><i>Hand-written rules, no statistics</i></span><em>&#10003;</em></button>
+          <button class="item" data-v="learned" data-n="Learned"><span><b>Learned model only</b><i>Statistical model of how risky a commit is</i></span><em>&#10003;</em></button>
+        </div>
+      </div>
+      <button id="act" class="send" title="Send" aria-label="Send" disabled>&#8593;</button>
+    </div>
+    <p class="hint">A word is sent when you type a space and cannot be taken back. To correct yourself, say it: "black, no wait, white".</p>
+  </footer>
+</main>
+
+<dialog id="resultsdlg">
+  <div class="dlghead"><h2>Results on the public dev set</h2><button id="closedlg" aria-label="Close">Esc</button></div>
+  <select id="set"><option>dev</option><option>dev_extra</option></select>
+  <div id="results"></div>
+</dialog>
+<script src="app.js"></script>
+</body>
+</html>

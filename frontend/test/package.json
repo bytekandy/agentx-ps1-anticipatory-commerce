@@ -1,0 +1,2 @@
+{"name": "frontend-e2e", "private": true, "description": "Optional end-to-end check of the page (jsdom). Not part of the app.",
+ "devDependencies": {"jsdom": "^26.0.0", "eventsource": "^3.0.0"}}
