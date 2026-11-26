@@ -17,7 +17,7 @@ backend/     Python (standard library only): the agent and the Rezolve starter k
   anticipatory/   the agent package (see below)
   data/           our own extra test requests (dev_extra.jsonl)
   outputs/        results on dev and dev_extra, and the generated report
-  server/         a thin streaming interface over the agent, for the UI (HTTP, JSON, server-sent events)
+  server/         a thin streaming interface over the agent, for the UI (REST, WebSocket, server-sent events)
   scripts/        analysis, training, report and test-data builders
   tests/          unit and scenario tests
 frontend/    base UI (added in a later stage)
@@ -45,13 +45,17 @@ python evaluate.py --agent agent_heuristic.py   # rules only (the safe reference
 python evaluate.py --agent agent_learned.py     # learned risk model only
 ```
 
-Run the stream interface the UI will talk to (standard library only; the contract is [`docs/stream-contract.md`](docs/stream-contract.md)):
+Run the stream interface the UI will talk to. It is optional and uses well-known packages (FastAPI, uvicorn, httpx, websockets; Python 3.11 or newer), kept apart from the agent, which stays standard library only. Contract: [`docs/stream-contract.md`](docs/stream-contract.md).
 
 ```
-python -m server                      # http://127.0.0.1:8765, this machine only
-python scripts/stream_client.py --live "beige Loomsy sneakers size 10 under 3000"   # in another terminal
-python scripts/stream_client.py --replay-example dev-0004 --delay 300
+pip install -r requirements-server.txt   # once
+python -m server                         # http://127.0.0.1:8765 (this machine only), docs at /docs
+python scripts/stream_client.py --live "beige Loomsy sneakers size 10 under 3000"      # WebSocket
+python scripts/stream_client.py --rest "beige Loomsy sneakers size 10 under 3000"      # stateless POSTs
+python scripts/stream_client.py --replay-example dev-0004 --delay 300                  # server-sent events
 ```
+
+It refuses to listen beyond this machine without an API key (`--api-key` or `STREAM_API_KEY`); other web origins must be allowed with `--cors-origin`.
 
 Regenerate the committed outputs (results on dev and dev_extra, and the report with per-tag tables and the cost and speed numbers; about 15 seconds; scoring is the organisers' own `evaluate.py`, imported unchanged):
 
@@ -61,7 +65,7 @@ python scripts/report.py
 
 Retrain the risk model (synthetic requests, pure Python, about two minutes): `python scripts/train_risk.py` from `backend/`. Rebuild the extra test requests: `python scripts/build_dev_extra.py`.
 
-Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`):
+Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`). The server tests skip themselves when the optional packages are not installed, so the agent's own tests need nothing but Python:
 
 ```
 python -m unittest discover -s tests -t .

@@ -52,8 +52,10 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
   `catalogue.csv` where the kit puts it. The package reads its own data files relative to itself.
 - Python 3.8 or later (static analysis says 3.8 is the minimum; only 3.14 was executed here).
 - No network, no writes, no randomness: same input, same output (5,000 of 5,000 requests identical
-  on a replay). The optional stream server (`python -m server`) is a demo interface for one
-  machine: it listens on localhost, has no authentication, and is not part of what the harness runs.
+  on a replay). The optional stream server (`python -m server`) is a demo interface that
+  is not part of what the harness runs. It uses third-party packages (`backend/requirements-server.txt`,
+  Python 3.11 or newer); the agent does not. It listens on localhost by default and refuses another
+  address without an API key; there is no TLS.
 
 ### Design constants, and how each was set
 | Constant | Value | How it was set | Depends on dev? |
