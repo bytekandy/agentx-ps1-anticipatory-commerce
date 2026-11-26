@@ -233,12 +233,11 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/server/`, `backend/requirements-server.txt`, `backend/scripts/stream_client.py`, `docs/stream-contract.md`, `backend/tests/{_server_fixture,test_server_service,test_server_models,test_server_http,test_server_cli,test_server_client,test_server_contract}.py`, `README.md`.
 - **Exit (met):** a client can submit words one by one and receive trace records (WebSocket, REST and replay, tested); contract documented and checked by a test; 446 tests green with the extras, 376 plus 5 skipped modules without them.
 
-### Stage 11 - Base UI - `stage-11/base-ui` - todo
-- Specs are discussed with the user at the start of this stage; this is only the starting point.
-- Starting point: a UI that replays or live-types a request word by word and shows slots, confidences, candidate count and the commit moment, driven by the stream interface.
-- Create `frontend/`, agree its conventions, add a short run guide.
-- **Owns:** `frontend/` only (plus a `README.md` run-steps section).
-- **Exit:** the UI runs end to end against the real agent on dev requests, including a correction case; it is good enough to record the demo video from.
+### Stage 11 - Base UI - `stage-11/base-ui` - done
+- A small extension, not the core: one static page (`frontend/index.html`, `style.css`, `app.js`, plain JavaScript, no build step, no dependencies) served by the stream server with `python -m server --static ../frontend`.
+- Agent tab: type a request live over the WebSocket (each completed word is sent; sent words are locked) or replay a dev example or text over SSE at a chosen speed. It shows the words as chips, the slots, confidence, flags, the reason, the risk against the break-even risk, the commit moment, and the final answer with its score when it is a dev example. Results tab: the committed scores against the kit baseline, by tag.
+- The page has no decision logic; it only draws what the stream contract sends. API key field for a server that needs one.
+- Checked end to end in jsdom against the real agent (15 checks: early commit before Finish, edit lock, an unknown brand not committed, a scored correction replay, results tab 43.5). The script is kept as an optional dev tool in `frontend/test/`; `backend/tests/test_frontend.py` checks the page against the API cheaply (ids, paths, no external URLs).
 
 ### Stage 12 - Submission package - `stage-12/submission-package` - todo
 - `docs/architecture-note.md` (1 page), `docs/abstract.md` (500 words or fewer: impact, cost estimate, innovation, build summary).
