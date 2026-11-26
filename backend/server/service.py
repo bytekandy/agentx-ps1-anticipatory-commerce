@@ -1,24 +1,25 @@
-"""The stream service: sessions, replay, examples and results. No HTTP in this file.
+"""The stream service: runs of the agent, replay, examples and results. No web framework here.
 
-A client drives the agent in one of two ways:
+A *run* is one request being read by one agent. It is owned by exactly one caller (one REST call,
+or one WebSocket connection), so there are no sessions to store, expire or share: the agent is
+deterministic and causal (the answer at word t depends only on words 1 to t, which is tested), so
+a stateless call can simply replay the words it is given and return the event for the last one.
 
-  live    `create_session`, then `push_word` once per word, then `finish`. Every call returns
-          the next event, so any client (a browser, a script, a speech recogniser) works.
-  replay  `replay` yields the events of a whole request in order; the HTTP layer paces them as
-          server-sent events, so a browser can simply watch the agent read a request.
+    step(words)      the event for the last word of the words so far (stateless REST)
+    answer(words)    the final answer for a finished request (stateless REST)
+    run(words)       every event of a whole request
+    replay(...)      the same, from free text or a dev example id, for paced streaming
+    new_run(...)     a Run to feed word by word (one WebSocket connection)
 
-Safety: a session is one agent with its own state and its own search counter, guarded by a lock
-(the agent is not thread-safe). Sessions expire when idle, and the number of sessions, words per
-session and the size of a word are limited, so a client cannot exhaust the process.
+The agent is not thread-safe but a Run is never shared, and everything runs share (the lexicon,
+the risk model, the product directory) is read-only apart from a spelling cache that is safe
+under concurrent use.
 """
 import json
 import platform
-import secrets
-import threading
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from anticipatory.agent import AnticipatoryAgent
 from anticipatory.catalog_port import ToolsCatalog
@@ -40,17 +41,15 @@ DATASETS = {"dev": (BACKEND / "dev.jsonl", BACKEND / "outputs" / "results.jsonl"
 
 @dataclass(frozen=True)
 class Limits:
-    max_sessions: int = 200
-    idle_seconds: float = 600.0      # an open session nobody touches is forgotten after this
-    finished_seconds: float = 30.0   # a finished one is kept this long (for "already finished" replies)
-    max_words: int = 500             # per session
+    max_words: int = 500             # per request
     max_word_chars: int = 100
     max_text_chars: int = 4000       # a replayed free-text request
-    max_examples: int = 500
+    max_examples: int = 500          # per page
+    max_body_bytes: int = 16 * 1024  # enforced by the web layer
 
 
-class SessionTools:
-    """What `tools` is for the agent: the kit's search, counted per session."""
+class RunTools:
+    """What `tools` is for the agent: the kit's search, counted per run."""
 
     def __init__(self):
         self.searches = 0
@@ -63,36 +62,85 @@ class SessionTools:
         self.searches += n
 
 
-@dataclass
-class Session:
-    id: str
-    agent_name: str
-    agent: AnticipatoryAgent
-    tools: SessionTools
-    request_id: Any
-    created: float
-    touched: float
-    lock: threading.Lock = field(default_factory=threading.Lock)
-    words: List[str] = field(default_factory=list)
-    commit: Optional[Dict[str, Any]] = None      # {"seq", "product_id"}
-    finished: bool = False
-    last_filters: Optional[Dict[str, Any]] = None
-    example: Optional[Dict[str, Any]] = None     # the dev request being replayed, if any
+class Run:
+    """One request being read by one agent. Not shared between threads or callers."""
+
+    def __init__(self, service: "StreamService", agent_name: str, request_id: Any = None,
+                 example: Optional[Dict[str, Any]] = None):
+        self.service = service
+        self.agent_name = agent_name
+        self.request_id = request_id
+        self.example = example
+        self.tools = RunTools()
+        self.agent = service._make_agent(agent_name, self.tools)
+        self.agent.start(request_id)
+        self.words: List[str] = []
+        self.commit: Optional[Dict[str, Any]] = None       # {"seq", "product_id"}
+        self.last_filters: Optional[Dict[str, Any]] = None
+        self.finished = False
+
+    def start_event(self, text: Optional[str] = None, words: Optional[List[str]] = None):
+        return start_event(self.agent_name, self.request_id, text, words)
+
+    def _commit_view(self) -> Optional[Dict[str, Any]]:
+        if not self.commit:
+            return None
+        return dict(self.commit, product=self.service.directory.get(self.commit["product_id"]))
+
+    def push(self, word: str) -> Dict[str, Any]:
+        word = self.service._check_word(word)
+        if self.finished:
+            raise ServiceError(409, "run_finished", "this request is finished")
+        if len(self.words) >= self.service.limits.max_words:
+            raise ServiceError(413, "too_many_words",
+                               f"a request is limited to {self.service.limits.max_words} words")
+        self.words.append(word)
+        out = self.agent.observe(word)
+        record = self.agent.trace[-1]
+        commit = None
+        if out and out.get("commit"):
+            self.commit = {"seq": record.index, "product_id": out["commit"]}
+            commit = self._commit_view()
+        if out:
+            self.last_filters = out.get("filters")
+        return word_event(record, commit, self._commit_view(), self.tools.searches)
+
+    def finish(self) -> Dict[str, Any]:
+        if self.finished:
+            raise ServiceError(409, "run_finished", "this request is already finished")
+        final_id = self.agent.finish()
+        self.finished = True
+        snapshot = self.agent.state.snapshot
+        return final_event(len(self.words), final_id, self.service.directory.get(final_id),
+                           snapshot.filters, [u.label() for u in snapshot.unresolved],
+                           self._commit_view(), self.tools.searches, self._evaluation(final_id))
+
+    def _evaluation(self, final_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Score a replayed dev request with the kit's own scorer; None for free text."""
+        if self.example is None:
+            return None
+        import evaluate
+        commits = [(self.commit["seq"], self.commit["product_id"])] if self.commit else []
+        scored = evaluate.score_one(self.example, commits, final_id, self.tools.searches,
+                                    self.last_filters)
+        directory = self.service.directory
+        return {"target": self.example["target"],
+                "target_product": directory.get(self.example["target"]),
+                "correct": scored["correct"], "wrong_commits": scored["wrong_commits"],
+                "early_words": scored["early_words"], "early_share": scored["early_share"],
+                "oracle_share": scored["oracle_share"], "searches": scored["searches"],
+                "score": scored["score"], "gold_filters": self.example.get("filters")}
 
 
 class StreamService:
     def __init__(self, config: Config = DEFAULT_CONFIG, limits: Limits = Limits(),
-                 clock: Callable[[], float] = time.monotonic,
                  lexicon: Optional[Lexicon] = None, directory: Optional[ProductDirectory] = None):
         self.config = config
         self.limits = limits
-        self.clock = clock
         self.lexicon = lexicon or Lexicon.from_catalogue(config=config.vocab,
                                                          spelling=config.spelling)
         self.directory = directory or ProductDirectory.from_catalogue()
         self._learned = LearnedRisk.from_file(config=config)
-        self._sessions: Dict[str, Session] = {}
-        self._lock = threading.Lock()
         self._examples: Dict[str, Dict[str, Any]] = {}
         self._example_sets: Dict[str, List[str]] = {}
         self._baseline: Dict[str, Dict[str, Any]] = {}
@@ -101,21 +149,19 @@ class StreamService:
 
     def info(self) -> Dict[str, Any]:
         return {"version": VERSION, "agents": list(AGENT_NAMES), "default_agent": "hybrid",
-                "products": len(self.directory), "datasets": {n: len(self._load_set(n))
-                                                              for n in DATASETS},
+                "products": len(self.directory),
+                "datasets": {name: len(self._load_set(name)) for name in DATASETS},
                 "break_even_risk": round(break_even_risk(self.config.policy.words_saved_assumed,
                                                          self.config), 4),
-                "limits": {"max_sessions": self.limits.max_sessions,
-                           "idle_seconds": self.limits.idle_seconds,
-                           "finished_seconds": self.limits.finished_seconds,
-                           "max_words": self.limits.max_words,
+                "limits": {"max_words": self.limits.max_words,
                            "max_word_chars": self.limits.max_word_chars,
-                           "max_text_chars": self.limits.max_text_chars},
+                           "max_text_chars": self.limits.max_text_chars,
+                           "max_body_bytes": self.limits.max_body_bytes},
                 "python": platform.python_version()}
 
-    # -- sessions (live use) ----------------------------------------------------------------
+    # -- runs -------------------------------------------------------------------------------
 
-    def _make_agent(self, name: str, tools: SessionTools) -> AnticipatoryAgent:
+    def _make_agent(self, name: str, tools: RunTools) -> AnticipatoryAgent:
         if name not in AGENT_NAMES:
             raise ServiceError(400, "unknown_agent", f"agent must be one of {list(AGENT_NAMES)}")
         risk = {"hybrid": lambda: HybridRisk(self._learned, self.config),
@@ -124,45 +170,9 @@ class StreamService:
         return AnticipatoryAgent(ToolsCatalog(tools), self.config, risk_model=risk,
                                  lexicon=self.lexicon)
 
-    def _new_session(self, agent: str, request_id: Any) -> Session:
-        tools = SessionTools()
-        now = self.clock()
-        session = Session(id=secrets.token_urlsafe(9), agent_name=agent,
-                          agent=self._make_agent(agent, tools), tools=tools,
-                          request_id=request_id, created=now, touched=now)
-        session.agent.start(request_id)
-        return session
-
-    def _sweep(self) -> None:
-        """Forget sessions that are idle (open ones) or long finished. Call with the lock held."""
-        now = self.clock()
-        for sid, sess in list(self._sessions.items()):
-            limit = self.limits.finished_seconds if sess.finished else self.limits.idle_seconds
-            if now - sess.touched > limit:
-                del self._sessions[sid]
-
-    def create_session(self, agent: str = "hybrid", request_id: Any = None) -> Dict[str, Any]:
-        with self._lock:
-            self._sweep()
-            open_now = sum(1 for s in self._sessions.values() if not s.finished)
-            if open_now >= self.limits.max_sessions:
-                raise ServiceError(429, "too_many_sessions",
-                                   "too many open sessions; finish or close one and retry")
-            room = 4 * self.limits.max_sessions       # bound the memory finished sessions use
-            for sid in [s for s, sess in sorted(self._sessions.items(), key=lambda kv: kv[1].touched)
-                        if sess.finished][:max(0, len(self._sessions) - room + 1)]:
-                del self._sessions[sid]
-            session = self._new_session(agent, request_id)
-            self._sessions[session.id] = session
-        return start_event(session.id, agent, request_id)
-
-    def _get(self, sid: str) -> Session:
-        with self._lock:
-            self._sweep()
-            session = self._sessions.get(sid)
-        if session is None:
-            raise ServiceError(404, "unknown_session", "no such session (it may have expired)")
-        return session
+    def new_run(self, agent: str = "hybrid", request_id: Any = None,
+                example: Optional[Dict[str, Any]] = None) -> Run:
+        return Run(self, agent, request_id, example)
 
     def _check_word(self, word: Any) -> str:
         if not isinstance(word, str):
@@ -172,81 +182,43 @@ class StreamService:
         if len(word.split()) != 1:
             raise ServiceError(400, "bad_word", "send one word at a time (no spaces)")
         if len(word) > self.limits.max_word_chars:
-            raise ServiceError(400, "bad_word", f"word longer than {self.limits.max_word_chars} characters")
+            raise ServiceError(400, "bad_word",
+                               f"word longer than {self.limits.max_word_chars} characters")
         return word
 
-    def _observe(self, session: Session, word: str) -> Dict[str, Any]:
-        """Feed one word to the agent. The session lock must be held."""
-        if len(session.words) >= self.limits.max_words:
+    def _check_words(self, words: Any) -> List[str]:
+        if not isinstance(words, (list, tuple)) or not words:
+            raise ServiceError(400, "bad_request", "words must be a non-empty list")
+        if len(words) > self.limits.max_words:
             raise ServiceError(413, "too_many_words",
                                f"a request is limited to {self.limits.max_words} words")
-        session.words.append(word)
-        out = session.agent.observe(word)
-        record = session.agent.trace[-1]
-        commit = None
-        if out and out.get("commit"):
-            session.commit = {"seq": record.index, "product_id": out["commit"]}
-            commit = dict(session.commit, product=self.directory.get(out["commit"]))
-        if out:
-            session.last_filters = out.get("filters")
-        session.touched = self.clock()
-        return word_event(session.id, record, commit, session.tools.searches)
+        return [self._check_word(w) for w in words]
 
-    def push_word(self, sid: str, word: Any) -> Dict[str, Any]:
-        word = self._check_word(word)
-        session = self._get(sid)
-        with session.lock:
-            if session.finished:
-                raise ServiceError(409, "session_finished", "this request is finished; start a new session")
-            return self._observe(session, word)
+    def step(self, words: Sequence[str], agent: str = "hybrid",
+             request_id: Any = None) -> Dict[str, Any]:
+        """The event for the last of `words`, as if they had been sent one at a time."""
+        words = self._check_words(words)
+        run = self.new_run(agent, request_id)
+        event = None
+        for word in words:
+            event = run.push(word)
+        return event
 
-    def _finish(self, session: Session) -> Dict[str, Any]:
-        """Finish the request. The session lock must be held."""
-        final_id = session.agent.finish()
-        session.finished = True
-        session.touched = self.clock()
-        snapshot = session.agent.state.snapshot
-        commit = None
-        if session.commit:
-            commit = dict(session.commit, product=self.directory.get(session.commit["product_id"]))
-        return final_event(session.id, len(session.words), final_id, self.directory.get(final_id),
-                           snapshot.filters, [u.label() for u in snapshot.unresolved], commit,
-                           session.tools.searches, self._evaluate(session, final_id))
+    def answer(self, words: Sequence[str], agent: str = "hybrid",
+               request_id: Any = None) -> Dict[str, Any]:
+        """The final event for a finished request made of `words`."""
+        run = self.new_run(agent, request_id)
+        for word in self._check_words(words):
+            run.push(word)
+        return run.finish()
 
-    def finish(self, sid: str) -> Dict[str, Any]:
-        session = self._get(sid)
-        with session.lock:
-            if session.finished:
-                raise ServiceError(409, "session_finished", "this request is already finished")
-            return self._finish(session)
-
-    def close(self, sid: str) -> None:
-        with self._lock:
-            if self._sessions.pop(sid, None) is None:
-                raise ServiceError(404, "unknown_session", "no such session (it may have expired)")
-
-    def open_sessions(self) -> int:
-        """Sessions that are not finished yet (the ones the limit counts)."""
-        with self._lock:
-            self._sweep()
-            return sum(1 for s in self._sessions.values() if not s.finished)
-
-    # -- evaluation of a replayed dev request -----------------------------------------------
-
-    def _evaluate(self, session: Session, final_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        """Score a replayed dev request with the kit's own scorer; None for free text."""
-        example = session.example
-        if example is None:
-            return None
-        import evaluate
-        commits = [(session.commit["seq"], session.commit["product_id"])] if session.commit else []
-        scored = evaluate.score_one(example, commits, final_id, session.tools.searches,
-                                    session.last_filters)
-        return {"target": example["target"], "target_product": self.directory.get(example["target"]),
-                "correct": scored["correct"], "wrong_commits": scored["wrong_commits"],
-                "early_words": scored["early_words"], "early_share": scored["early_share"],
-                "oracle_share": scored["oracle_share"], "searches": scored["searches"],
-                "score": scored["score"], "gold_filters": example.get("filters")}
+    def run(self, words: Sequence[str], agent: str = "hybrid",
+            request_id: Any = None) -> List[Dict[str, Any]]:
+        """Every event of a whole request: start, one per word, final."""
+        words = self._check_words(words)
+        run = self.new_run(agent, request_id)
+        return [run.start_event(" ".join(words), list(words))] + [run.push(w) for w in words] \
+            + [run.finish()]
 
     # -- replay -----------------------------------------------------------------------------
 
@@ -255,7 +227,8 @@ class StreamService:
         """Yield the events of a whole request: start, one per word, final.
 
         Give either free `text` or the `example` id of a dev or dev_extra request (which is
-        then also scored). The caller decides how fast to consume the events.
+        then also scored). Everything is validated before the first event, so a caller can
+        reject a bad request before it starts streaming.
         """
         if (text is None) == (example is None):
             raise ServiceError(400, "bad_request", "give exactly one of text or example")
@@ -265,23 +238,23 @@ class StreamService:
             words, text = list(request["words"]), request["text"]
         else:
             if len(text) > self.limits.max_text_chars:
-                raise ServiceError(400, "text_too_long", f"text longer than {self.limits.max_text_chars} characters")
+                raise ServiceError(400, "text_too_long",
+                                   f"text longer than {self.limits.max_text_chars} characters")
             words = text.split()
             if not words:
                 raise ServiceError(400, "bad_request", "text has no words")
             if len(words) > self.limits.max_words:
-                raise ServiceError(413, "too_many_words", f"a request is limited to {self.limits.max_words} words")
-        session = self._new_session(agent, request["id"] if request else None)
-        session.example = request
-        return self._replay_events(session, text, words)
+                raise ServiceError(413, "too_many_words",
+                                   f"a request is limited to {self.limits.max_words} words")
+        run = self.new_run(agent, request["id"] if request else None, request)
+        return self._replay_events(run, text, words)
 
-    def _replay_events(self, session: Session, text: str, words: List[str]) -> Iterator[Dict[str, Any]]:
-        yield start_event(session.id, session.agent_name, session.request_id, text, words)
+    @staticmethod
+    def _replay_events(run: Run, text: str, words: List[str]) -> Iterator[Dict[str, Any]]:
+        yield run.start_event(text, words)
         for word in words:
-            with session.lock:
-                yield self._observe(session, word)
-        with session.lock:
-            yield self._finish(session)
+            yield run.push(word)
+        yield run.finish()
 
     # -- examples and results ---------------------------------------------------------------
 
@@ -306,6 +279,7 @@ class StreamService:
         if tag:
             rows = [r for r in rows if tag in r["tags"] or (tag == "plain" and not r["tags"])]
         limit = max(1, min(limit, self.limits.max_examples))
+        offset = max(0, offset)
         page = rows[offset:offset + limit]
         return {"set": set_name, "total": len(rows), "offset": offset,
                 "items": [{"id": r["id"], "text": r["text"], "tags": r["tags"],
@@ -332,7 +306,8 @@ class StreamService:
         self._load_set(set_name)
         path = DATASETS[set_name][1]
         if not Path(path).exists():
-            raise ServiceError(404, "no_results", "run `python scripts/report.py` to create the results")
+            raise ServiceError(404, "no_results",
+                               "run `python scripts/report.py` to create the results")
         with open(path, encoding="utf-8") as fh:
             results = [json.loads(line) for line in fh if line.strip()]
         tags = sorted({t for r in results for t in r["tags"]}) + ["plain"]

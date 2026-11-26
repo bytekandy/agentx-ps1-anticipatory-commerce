@@ -41,28 +41,30 @@ class ProductDirectory:
         return len(self._by_id)
 
 
-def start_event(session: str, agent: str, request_id: Any, text: Optional[str] = None,
+def start_event(agent: str, request_id: Any, text: Optional[str] = None,
                 words: Optional[List[str]] = None) -> Dict[str, Any]:
-    return {"type": "start", "version": VERSION, "session": session, "agent": agent,
-            "request_id": request_id, "text": text, "words": words}
+    return {"type": "start", "version": VERSION, "agent": agent, "request_id": request_id,
+            "text": text, "words": words}
 
 
-def word_event(session: str, record: TraceRecord, commit: Optional[Dict[str, Any]],
-               searches: int) -> Dict[str, Any]:
-    """One per word: the agent's full trace record, plus the product if it committed now."""
-    return {"type": "word", "version": VERSION, "session": session, "seq": record.index,
-            "word": record.word, "trace": record.to_dict(), "commit": commit,
+def word_event(record: TraceRecord, commit: Optional[Dict[str, Any]],
+               committed: Optional[Dict[str, Any]], searches: int) -> Dict[str, Any]:
+    """One per word: the agent's full trace record.
+
+    `commit` is set only on the word where the agent commits; `committed` is set on that word
+    and every later one, so the latest event alone tells a client whether and where it committed.
+    """
+    return {"type": "word", "version": VERSION, "seq": record.index, "word": record.word,
+            "trace": record.to_dict(), "commit": commit, "committed": committed,
             "searches": searches}
 
 
-def final_event(session: str, words: int, final_id: Optional[str],
-                product: Optional[Dict[str, Any]], filters: Dict[str, Any],
-                unresolved: List[str], commit: Optional[Dict[str, Any]], searches: int,
-                evaluation: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {"type": "final", "version": VERSION, "session": session, "words": words,
-            "final_product_id": final_id, "product": product, "filters": filters,
-            "unresolved": unresolved, "commit": commit, "searches": searches,
-            "evaluation": evaluation}
+def final_event(words: int, final_id: Optional[str], product: Optional[Dict[str, Any]],
+                filters: Dict[str, Any], unresolved: List[str], commit: Optional[Dict[str, Any]],
+                searches: int, evaluation: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return {"type": "final", "version": VERSION, "words": words, "final_product_id": final_id,
+            "product": product, "filters": filters, "unresolved": unresolved, "commit": commit,
+            "searches": searches, "evaluation": evaluation}
 
 
 def error_body(code: str, message: str) -> Dict[str, Any]:
