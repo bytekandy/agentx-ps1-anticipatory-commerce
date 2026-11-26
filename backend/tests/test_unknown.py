@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import InMemoryCatalog
+from anticipatory.policy import InMemoryCatalog
 from anticipatory.config import Config, UnknownConfig
 from anticipatory.lexicon import Lexicon, load_rows
 from anticipatory.slots import read_words

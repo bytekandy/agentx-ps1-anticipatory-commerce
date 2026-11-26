@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import ToolsCatalog
+from anticipatory.policy import ToolsCatalog
 from anticipatory.config import DEFAULT_CONFIG, Config
 from anticipatory.learned import LearnedStore, learn_from_request
 from anticipatory.lexicon import Lexicon

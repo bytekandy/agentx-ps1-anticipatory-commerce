@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-from anticipatory.catalog_port import InMemoryCatalog  # noqa: E402
+from anticipatory.policy import InMemoryCatalog  # noqa: E402
 from anticipatory.config import DEFAULT_CONFIG  # noqa: E402
 from anticipatory.lexicon import (CATEGORY_SYNONYMS, COLOUR_SYNONYMS, SIZE_SYNONYMS,  # noqa: E402
                                   Lexicon, load_rows)

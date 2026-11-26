@@ -38,7 +38,7 @@ from .config import DEFAULT_CONFIG, Config
 from .lexicon import SIZE_CUES, Lexicon
 from .numbers import read_number
 from .slots import Reading
-from .words import EnglishWords, english_words
+from .tokens import EnglishWords, english_words
 
 _EXTRA_SIZE = re.compile(r"^(\d*x+[sl]|\d+x[sl])$")        # xxxl, xxs, 4xl, 3xs
 _HALF_SIZE = re.compile(r"^\d{1,2}\.\d$")                # 10.5, 7.5: the shop has no half sizes

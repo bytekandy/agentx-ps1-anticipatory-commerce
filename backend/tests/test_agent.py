@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import InMemoryCatalog
+from anticipatory.policy import InMemoryCatalog
 from anticipatory.lexicon import Lexicon, load_rows
 
 BACKEND = Path(__file__).resolve().parents[1]

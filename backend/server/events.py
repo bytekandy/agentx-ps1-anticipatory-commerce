@@ -7,7 +7,7 @@ import csv
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from anticipatory.trace import TraceRecord
+from anticipatory.agent import TraceRecord
 
 VERSION = 1
 BACKEND = Path(__file__).resolve().parents[1]

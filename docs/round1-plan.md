@@ -60,16 +60,14 @@ agentx1_hack/                      monorepo root (git repo, branch main)
     anticipatory/                  our package
       config.py                    frozen dataclasses per area (all tunables)
       lexicon.py                   vocabularies from catalogue.csv, synonyms, Hindi-English words
-      tokens.py                    word normalisation shared by lexicon, numbers and slots
+      tokens.py                    word normalisation, plus English word frequencies (was words.py)
       numbers.py                   number words, "k" amounts, Indian price phrasing
       slots.py                     pure per-word slot extraction
       state.py                     incremental FilterState: values, confidences, revisions
-      catalog_port.py              CatalogPort interface + adapter over tools.search
       risk.py                      RiskModel interface, HeuristicRisk, LearnedRisk (Stage 6)
       spelling.py                  noisy-channel spelling correction (Stage 7)
       policy.py                    search scheduling + commit policy
       agent.py                     orchestrator implementing the kit's Agent interface
-      trace.py                     per-word decision trace records
     server/                          thin streaming interface for the UI (Stage 10)
     tests/                         test_<module>.py, unittest
     scripts/                       analyze_dev.py, report.py
@@ -115,7 +113,7 @@ agentx1_hack/                      monorepo root (git repo, branch main)
 ```
 word -> tokens.make_tokens -> slots.read_words (+ spelling, possessives)
      -> state.build_snapshot (+ unknown.find_unresolved)   [FilterState.push / finish]
-     -> policy.CommitPolicy.step:  gates -> risk.p_wrong (pre-check) -> catalog_port.find (counted, k=50)
+     -> policy.CommitPolicy.step:  gates -> risk.p_wrong (pre-check) -> policy.CatalogPort.find (counted, k=50)
      -> {wait | commit(product_id)} + trace record
 
 finish(): re-read the whole request with final=True -> reuse the last search if its filters are
@@ -160,16 +158,16 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 
 ### Stage 3 - Slot extraction - `stage-3/slot-extraction` - done (on merge)
 - `slots.py`: pure per-word extraction of category, colour, brand, size, budget, with confidences.
-- **Owns:** `backend/anticipatory/slots.py`, `backend/tests/test_slots.py`, `backend/scripts/slot_accuracy.py`; adds a slots block to `config.py`.
+- **Owns:** `backend/anticipatory/slots.py`, `backend/tests/test_slots.py`, `backend/scripts/check_reader.py`; adds a slots block to `config.py`.
 - **Exit:** unit tests green; slot accuracy on plain dev requests at or above 95% (measured with a small script over `dev.jsonl` gold filters, without an agent).
 
 ### Stage 4 - Filter state and corrections - `stage-4/filter-state` - done (on merge)
 - `state.py`: incremental `FilterState` (values, confidences, revision history); correction markers; cooldown after a revision; late constraints added without losing earlier slots.
-- **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`, `backend/scripts/state_replay.py`; adds a state block to `config.py`; makes `size_fits_category` public in `slots.py` (a rename).
+- **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`, `backend/scripts/check_reader.py`; adds a state block to `config.py`; makes `size_fits_category` public in `slots.py` (a rename).
 - **Exit:** unit tests green; replaying dev requests word by word gives the gold filters at the last word for at least 95% of plain and correction requests.
 
 ### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - done (on merge)
-- `catalog_port.py` (interface over the counted `tools.search`, with a fake for tests), `risk.py` (the `RiskModel` interface plus a hand-coded `HeuristicRisk`), `policy.py` (search scheduling and the decision-theoretic commit rule, see section 5), `trace.py` (one record per word), `anticipatory/agent.py` (orchestrator over `FilterState`), `backend/agent.py` (entry point for `evaluate.py`). Conservative thresholds first; verification in `finish()`.
+- the catalogue port (now in `policy.py`; interface over the counted `tools.search`, with a fake for tests), `risk.py` (the `RiskModel` interface plus a hand-coded `HeuristicRisk`), `policy.py` (search scheduling and the decision-theoretic commit rule, see section 5), `trace.py` (one record per word), `anticipatory/agent.py` (orchestrator over `FilterState`), `backend/agent.py` (entry point for `evaluate.py`). Conservative thresholds first; verification in `finish()`.
 - **Owns:** those files, `backend/tests/test_policy.py`, `backend/tests/test_agent.py`; adds a policy block to `config.py`.
 - **Exit:** `python evaluate.py --agent agent.py` runs; accuracy at or above baseline; zero wrong commits on the plain subset; score above 20. The score and per-tag table are recorded as the baseline for the hybrid comparison in Stage 6.
 
@@ -195,10 +193,10 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 
 ### Stage 7b - Real words and unresolved constraints (hybrid) - `stage-7b/unknown-words` - done (on merge)
 - Added after the Stage 7 review (user request): no hand-written lists of words to protect or of brands we do not sell.
-- `words.py` plus `data/english_words.tsv` (60,000 most frequent English words with counts). `spelling.py` now treats a real English word as a typo only when the shop word it resembles is at least 100 times more common ("short" and "skirt" stay, "runing" becomes "running"); the hand-written guard list is gone. Rule measured on 63 protected words (unsold clothing, brands, colours, ordinary English): none changed, all typos still fixed.
+- English word frequencies (now in `tokens.py`) plus `data/english_words.tsv` (60,000 most frequent English words with counts). `spelling.py` now treats a real English word as a typo only when the shop word it resembles is at least 100 times more common ("short" and "skirt" stay, "runing" becomes "running"); the hand-written guard list is gone. Rule measured on 63 protected words (unsold clothing, brands, colours, ordinary English): none changed, all typos still fixed.
 - `unknown.py`: finds constraints the shop cannot answer, for every slot, from structure plus data (words the catalogue text and lexicon explain are never flagged; function words come from the frequency list). Unknown brand (after "from", "by", "brand", before "brand", capitalised mid-sentence, or a name-like word before the category), unknown size ("size 14", "4XL", "size 32 sandals", "size M cap", handled in the state), unknown colour or style ("purple shirt", "in purple", "violet colour"). A very common English word (friday, nice) is never flagged. `Snapshot.unresolved` makes the state unsettled: no early commit, the trace and `agent.unresolved` say what was not understood.
 - Removed the low-confidence rules floor in `HybridRisk`: it cost 1.3 score points on typo-heavy requests and saved at most 0.3.
-- **Owns:** `backend/anticipatory/{words,unknown}.py`, `backend/anticipatory/data/english_words.tsv`, `backend/tests/{test_words,test_unknown}.py`; changes `spelling.py`, `slots.py` (`Reading`), `state.py`, `policy.py`, `trace.py`, `agent.py`, `lexicon.py` (`FILLER_WORDS`), `config.py` (`UnknownConfig`, spelling ratio).
+- **Owns:** `backend/anticipatory/{tokens,unknown}.py`, `backend/anticipatory/data/english_words.tsv`, `backend/tests/{test_tokens,test_unknown}.py`; changes `spelling.py`, `slots.py` (`Reading`), `state.py`, `policy.py`, `trace.py`, `agent.py`, `lexicon.py` (`FILLER_WORDS`), `config.py` (`UnknownConfig`, spelling ratio).
 - **Results:** dev unchanged at 43.4 with 0 wrong commits and 0 flagged dev requests (every dev request is satisfiable, so any flag would be a false positive); 0 of 3,000 clean synthetic requests flagged. On requests that ask for something the shop cannot answer, early commits fall from 20.9% to 5.6% (unknown brand) and 2.8% to 0.5% (colour); for an unknown size from 1.9% to 0.8% (corrected in Stage 8: the first measurement, 16.5% to 0.2%, inserted the unknown size after a valid one and was wrong; sized categories already cannot commit without a recognised size). The brand figure that remains is commits made before the unknown word was spoken, which no reading can prevent.
 - **Exit (met):** zero flags on dev; zero wrong commits on dev; hand-written guard list removed.
 
@@ -300,3 +298,6 @@ Impact (earlier, safer shopping assistance) / Build summary (layered rules engin
 
 - Merge style for PRs: squash and merge (decided; linear `main`).
 - UI specs, framework and how it talks to the backend - discussed at Stage 10 and Stage 11.
+
+### Stage 17 - File consolidation - done
+- Merged for readability, behaviour unchanged (results logs byte for byte): `trace.py` into `agent.py`, `catalog_port.py` into `policy.py`, `words.py` into `tokens.py`, `slot_accuracy.py` and `state_replay.py` into `scripts/check_reader.py slots|state`; tests `test_catalog_port` into `test_policy`, `test_words` into `test_tokens`, `test_punctuation_and_cue_typos` into `test_state`.

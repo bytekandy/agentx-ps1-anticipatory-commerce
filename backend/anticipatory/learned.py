@@ -24,8 +24,7 @@ from .config import DEFAULT_CONFIG
 from .lexicon import Lexicon
 from .slots import read_words
 from .state import find_markers
-from .tokens import tokenize
-from .words import english_words
+from .tokens import english_words, tokenize
 
 DEFAULT_PATH = Path(__file__).resolve().parent / "data" / "learned_lexicon.json"
 _SLOTS = ("category", "colour", "brand")

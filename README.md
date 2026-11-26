@@ -75,11 +75,11 @@ python -m unittest discover -s tests -t .
 
 The agent code lives in the package `backend/anticipatory/` (standard library only). Layers, from the words up:
 
-- **Reading the words:** `tokens.py` (normalise words), `numbers.py` (prices and sizes as digits, "3.5k" or English and Hindi number words), `lexicon.py` (categories, colours, brands and sizes from the catalogue, plus a seed synonym list), `words.py` (general English word frequencies), `spelling.py` (noisy-channel correction of typed product words), `slots.py` (slot mentions with confidences: size or price decided by cue words such as "size", "UK", "under", "tak").
+- **Reading the words:** `tokens.py` (normalise words, and general English word frequencies), `numbers.py` (prices and sizes as digits, "3.5k" or English and Hindi number words), `lexicon.py` (categories, colours, brands and sizes from the catalogue, plus a seed synonym list), `spelling.py` (noisy-channel correction of typed product words), `slots.py` (slot mentions with confidences: size or price decided by cue words such as "size", "UK", "under", "tak").
 - **Knowing what the shopper wants:** `state.py` (the running reading: one belief per slot, corrections such as "black, oops, navy", warning flags), `unknown.py` (constraints the shop cannot answer: an unknown brand, size, colour or style).
-- **Deciding:** `risk.py` (how likely a commit is to be wrong: hand-coded rules and a learned logistic regression, combined), `policy.py` (when to search and when to commit, from the break-even of the score formula), `catalog_port.py` (the only door to the catalogue), `trace.py` (one record per word), `agent.py` (the orchestrator).
+- **Deciding:** `risk.py` (how likely a commit is to be wrong: hand-coded rules and a learned logistic regression, combined), `policy.py` (the catalogue port, and when to search and when to commit, from the break-even of the score formula), `agent.py` (the orchestrator and its per-word trace record).
 
-Check the reader against dev with `python scripts/slot_accuracy.py` and `python scripts/state_replay.py` (from `backend/`).
+Check the reader against dev with `python scripts/check_reader.py slots` and `python scripts/check_reader.py state` (from `backend/`).
 
 For the data sources, every assumption, what dev influenced, and the verification behind these numbers, read [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md).
 

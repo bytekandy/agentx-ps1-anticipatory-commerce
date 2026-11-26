@@ -6,15 +6,41 @@
 It implements the kit's agent interface (`start`, `observe`, `finish`). All thinking lives in
 the modules below it; this class only wires them together and keeps the per-request memory.
 """
-from typing import Any, Callable, Dict, List, Optional
+from dataclasses import asdict, dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .catalog_port import CatalogPort
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import Lexicon
-from .policy import CommitPolicy, search_filters
+from .policy import CatalogPort, CommitPolicy, search_filters
 from .risk import HeuristicRisk, RiskModel
 from .state import FilterState
-from .trace import TraceRecord
+
+# ---- the trace: one record per word, what the agent read, did and why (for debugging, the
+# evaluation report, the UI and the demo video; plain data with `to_dict()` for JSON)
+
+@dataclass(frozen=True)
+class TraceRecord:
+    index: int                              # 1-based position of the word
+    word: str
+    filters: Dict[str, Any]                 # the reading after this word
+    confidence: float
+    settled: bool
+    correction_pending: bool
+    pending_slots: Tuple[str, ...]
+    searched: bool                          # a search was made after this word
+    n_candidates: Optional[int]             # products that matched, if searched
+    action: str                             # "wait" or "commit"
+    product_id: Optional[str]               # set when committing
+    risk: Optional[float]                   # the risk the policy weighed, if it got that far
+    reason: str                             # a short human-readable why
+    unresolved: Tuple[str, ...] = ()        # constraints we could not match, e.g. ("brand: nike",)
+
+    def to_dict(self) -> Dict[str, Any]:
+        record = asdict(self)
+        record["pending_slots"] = list(self.pending_slots)
+        record["unresolved"] = list(self.unresolved)
+        return record
+
 
 # When the full filters match nothing, relax them in this order (like the kit's baseline).
 _RELAX_ORDER = ("min_price", "max_price", "size", "brand", "colour", "category")

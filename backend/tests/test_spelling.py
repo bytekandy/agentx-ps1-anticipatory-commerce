@@ -188,7 +188,7 @@ class PipelineRobustnessTest(unittest.TestCase):
     def accuracy(self, spelling_on, typo_rate=0.15, count=300):
         import make_training_data as gen
         from anticipatory.agent import AnticipatoryAgent
-        from anticipatory.catalog_port import InMemoryCatalog
+        from anticipatory.policy import InMemoryCatalog
         from anticipatory.config import Config
         cfg = Config(spelling=SpellingConfig(enabled=spelling_on))
         lexicon = Lexicon(self.rows, spelling=cfg.spelling)

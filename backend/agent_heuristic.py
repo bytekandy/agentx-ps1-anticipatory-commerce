@@ -3,7 +3,7 @@
 The Stage 5 policy, kept as the safe reference the hybrid is measured against.
 """
 from anticipatory.agent import AnticipatoryAgent
-from anticipatory.catalog_port import ToolsCatalog
+from anticipatory.policy import ToolsCatalog
 
 
 class Agent(AnticipatoryAgent):
