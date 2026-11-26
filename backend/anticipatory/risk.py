@@ -16,7 +16,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol, Sequence
+from typing import Dict, Optional, Protocol
 
 from .config import DEFAULT_CONFIG, Config
 from .state import Snapshot

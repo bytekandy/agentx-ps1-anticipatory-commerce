@@ -32,13 +32,12 @@ waits), while a miss means committing to something the shopper did not ask for.
 """
 import re
 from dataclasses import dataclass
-from typing import FrozenSet, List, Sequence, Set
+from typing import List, Optional, Set
 
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import SIZE_CUES, Lexicon
 from .numbers import read_number
 from .slots import Reading
-from .tokens import Token
 from .words import EnglishWords, english_words
 
 _EXTRA_SIZE = re.compile(r"^(\d*x+[sl]|\d+x[sl])$")        # xxxl, xxs, 4xl, 3xs
@@ -58,7 +57,7 @@ class Unresolved:
 
 
 def find_unresolved(reading: Reading, lexicon: Lexicon, config: Config = DEFAULT_CONFIG,
-                    english: EnglishWords = None) -> List[Unresolved]:
+                    english: Optional[EnglishWords] = None) -> List[Unresolved]:
     """Words in the reading that state a constraint nothing in the shop answers to."""
     cfg = config.unknown
     if not cfg.enabled:

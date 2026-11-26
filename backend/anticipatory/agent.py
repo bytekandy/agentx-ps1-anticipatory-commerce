@@ -8,7 +8,7 @@ the modules below it; this class only wires them together and keeps the per-requ
 """
 from typing import Any, Callable, Dict, List, Optional
 
-from .catalog_port import CatalogPort, ToolsCatalog
+from .catalog_port import CatalogPort
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import Lexicon
 from .policy import CommitPolicy, search_filters
