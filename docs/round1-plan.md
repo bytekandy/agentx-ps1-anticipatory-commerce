@@ -167,7 +167,7 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - **Owns:** `backend/anticipatory/state.py`, `backend/tests/test_state.py`, `backend/scripts/state_replay.py`; adds a state block to `config.py`; makes `size_fits_category` public in `slots.py` (a rename).
 - **Exit:** unit tests green; replaying dev requests word by word gives the gold filters at the last word for at least 95% of plain and correction requests.
 
-### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - doing
+### Stage 5 - Decision engine, first end-to-end - `stage-5/decision-engine` - done (on merge)
 - `catalog_port.py` (interface over the counted `tools.search`, with a fake for tests), `risk.py` (the `RiskModel` interface plus a hand-coded `HeuristicRisk`), `policy.py` (search scheduling and the decision-theoretic commit rule, see section 5), `trace.py` (one record per word), `anticipatory/agent.py` (orchestrator over `FilterState`), `backend/agent.py` (entry point for `evaluate.py`). Conservative thresholds first; verification in `finish()`.
 - **Owns:** those files, `backend/tests/test_policy.py`, `backend/tests/test_agent.py`; adds a policy block to `config.py`.
 - **Exit:** `python evaluate.py --agent agent.py` runs; accuracy at or above baseline; zero wrong commits on the plain subset; score above 20. The score and per-tag table are recorded as the baseline for the hybrid comparison in Stage 6.

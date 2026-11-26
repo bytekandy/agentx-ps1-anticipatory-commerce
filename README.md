@@ -6,7 +6,7 @@ A shopping request arrives one word at a time, for example "black running shoes,
 
 ## Status
 
-Work in progress. The starter kit is in place; the agent is being built stage by stage (see `docs/round1-plan.md`). Only the kit's baseline agent exists so far.
+Work in progress; the agent is being built stage by stage (see `docs/round1-plan.md`). The first end-to-end agent exists: on the dev set it scores 42.1 against the kit baseline's 20.0, with every answer right and no wrong commit.
 
 ## Repository layout
 
@@ -30,7 +30,11 @@ python evaluate.py                    # score the kit's baseline on dev.jsonl
 python search.py white Pacevo sneakers  # try the local catalogue search
 ```
 
-Scoring our own agent is added once the agent exists (`python evaluate.py --agent agent.py`).
+Score our agent on the dev set:
+
+```
+python evaluate.py --agent agent.py
+```
 
 Run the unit tests (also from `backend/`; works from the repo root too with `python -m unittest discover -s backend/tests -t backend`):
 
@@ -38,7 +42,7 @@ Run the unit tests (also from `backend/`; works from the repo root too with `pyt
 python -m unittest discover -s tests -t .
 ```
 
-The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms), and slot extraction: `slots.py` turns the words so far into slot mentions with confidences (size or price decided by cue words such as "size", "UK", "under", "tak"). Check it against dev with `python scripts/slot_accuracy.py` (run from `backend/`). `state.py` keeps the running reading of the request: one belief per slot, revisions when the shopper corrects themself ("black, oops, navy"), and warning flags for the decision policy. Replay dev word by word with `python scripts/state_replay.py`.
+The agent code lives in the package `backend/anticipatory/` (standard library only). So far it has the vocabulary layer: `config.py` (all tunables), `tokens.py` (word normalisation), `numbers.py` (prices and sizes written as digits, "3.5k" or English and Hindi number words) and `lexicon.py` (categories, colours, brands and sizes with synonyms), and slot extraction: `slots.py` turns the words so far into slot mentions with confidences (size or price decided by cue words such as "size", "UK", "under", "tak"). Check it against dev with `python scripts/slot_accuracy.py` (run from `backend/`). `state.py` keeps the running reading of the request: one belief per slot, revisions when the shopper corrects themself ("black, oops, navy"), and warning flags for the decision policy. Replay dev word by word with `python scripts/state_replay.py`. On top of that sit the decision layer (`risk.py`, `policy.py`, `catalog_port.py`, `trace.py`) and the orchestrator `agent.py`: the agent searches only when a search could lead to a commit, and commits only to a single matching product when the estimated risk of being wrong is below the break-even set by the score formula.
 
 ## Working on this repo
 
