@@ -21,25 +21,27 @@ let failed = 0; const check = (name, ok, detail = "") => { console.log((ok ? "PA
   check("reading shows the slots", $("slot-brand").textContent.includes("Loomsy") && $("slot-size").textContent.includes("10") && $("slot-max_price").textContent.includes("3,000"), $("slots").textContent);
   check("commit card appears before Finish", $("commit").textContent.includes("Loomsy Street Sneakers") && $("commit").textContent.includes("committed after word 8"), $("commit").textContent);
   check("a commit chip is marked", w.document.querySelectorAll(".chip.commit").length === 1);
-  $("finish").click(); await sleep(500);
+  $("act").click(); await sleep(500);
+  const newQuery = () => { $("text").disabled = true; $("act").click(); };
   check("final answer shown", $("final").textContent.includes("same as the early commit"), $("final").textContent);
   check("input locked after finish", $("text").disabled === true);
   // editing a sent word is refused
-  $("reset").click(); type(w, "black cap "); await sleep(150); type(w, "red cap "); 
+  newQuery(); type(w, "black cap "); await sleep(150); type(w, "red cap "); 
   check("a sent word cannot be changed", $("text").value === "black cap " && /already sent/.test($("status").textContent), $("text").value + " | " + $("status").textContent);
   // unresolved constraint is flagged and nothing commits
-  $("reset").click(); type(w, "navy Nike hoodies size M "); await sleep(300);
+  newQuery(); type(w, "navy Nike hoodies size M "); await sleep(300);
   check("unknown brand flagged", /not understood: brand: nike/.test($("flags").textContent), $("flags").textContent);
   check("no commit for it", $("commit").classList.contains("empty"));
   // a dev request with a correction, replayed
   w = await load(); $ = id => w.document.getElementById(id);
   const sel = $("example"); const opt = [...sel.querySelectorAll("optgroup[label='with a correction'] option")][0];
-  sel.value = opt.value; $("delay").value = 0; $("replay").click(); await sleep(1800);
+  sel.value = opt.value; sel.dispatchEvent(new w.Event("change")); $("delay").value = 0; $("act").click(); await sleep(1800);
   check("replay reaches the end", $("final").textContent.length > 20 && !$("final").classList.contains("empty"), $("final").textContent);
   check("replay is scored", /Right answer/.test($("evaluation").textContent), $("evaluation").textContent);
   check("replay filled the text box", $("text").value.length > 10);
   // results tab
-  w.document.querySelector("nav button[data-tab=results]").click(); await sleep(1200);
+  w.HTMLDialogElement.prototype.showModal = w.HTMLDialogElement.prototype.showModal || function () { this.setAttribute("open", ""); };   // jsdom lacks it
+  $("resultsbtn").click(); await sleep(1200);
   check("results table with the baseline", /our agent/.test($("results").textContent) && /43\.5/.test($("results").textContent), $("results").textContent.slice(0, 160));
   console.log(failed ? `${failed} FAILED` : "ALL PASSED"); process.exit(failed ? 1 : 0);
 })().catch(e => { console.log("ERROR", e); process.exit(2); });

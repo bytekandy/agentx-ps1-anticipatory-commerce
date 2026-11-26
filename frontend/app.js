@@ -17,14 +17,15 @@ function reset() {
   if (api.ws) { api.ws.onclose = null; api.ws.close(); api.ws = null; }
   if (api.es) { api.es.close(); api.es = null; }
   state = {words: 0, committedAt: null}; sent = "";
-  $("text").value = ""; $("text").disabled = false; $("finish").disabled = false;
+  $("text").value = ""; $("text").disabled = false; $("example").value = "";
   $("chips").innerHTML = ""; $("conf").style.width = "0"; $("confnum").textContent = "0.00";
   $("flags").innerHTML = ""; $("reason").textContent = ""; $("risk").textContent = "";
   $("slots").innerHTML = SLOTS.map(([k, label]) => `<div class="slot none" id="slot-${k}"><span>${label}</span><b>not mentioned</b></div>`).join("");
   setCard("commit", null, "");
   setCard("final", null, "");
   $("evaluation").classList.add("hidden"); say();
-  document.querySelector("#tab-live .thread").classList.add("fresh");
+  document.querySelector(".thread").classList.add("fresh");
+  updateAction();
 }
 
 function setCard(id, product, empty, extra = "", cls = "") {
@@ -37,7 +38,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": 
 
 function showWord(e) {
   const t = e.trace; state.words = e.seq;
-  document.querySelector("#tab-live .thread").classList.remove("fresh");
+  document.querySelector(".thread").classList.remove("fresh");
   const chip = document.createElement("span");
   chip.className = "chip" + (e.commit ? " commit" : t.settled ? "" : " hold");
   chip.innerHTML = esc(e.word) + (e.commit ? "<small>commit</small>" : "");
@@ -73,7 +74,7 @@ function showFinal(f) {
     el.innerHTML = `<h3>${e.correct ? "Right answer" : "Wrong answer"}${e.wrong_commits ? ", " + e.wrong_commits + " wrong commit" : ""}</h3>
       <div class="meta">score ${e.score.toFixed(3)} · ${e.early_words} word${e.early_words === 1 ? "" : "s"} early (best possible ${Math.round(e.oracle_share * f.words)}) · target ${esc(e.target_product ? e.target_product.title : e.target)}</div>`;
   }
-  $("text").disabled = true; $("finish").disabled = true;
+  $("text").disabled = true; updateAction();
 }
 
 function onMessage(msg) {
@@ -116,9 +117,19 @@ async function finish() {
     (await connect()).send(JSON.stringify({finish: true}));
   } catch (_) {}
 }
-$("finish").addEventListener("click", finish);
 $("text").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finish(); } });
-$("reset").addEventListener("click", reset);
+/* one button: Send, Replay, or New query, depending on what the box holds */
+function updateAction() {
+  const b = $("act"), done = $("text").disabled, sample = $("example").value, typed = $("text").value.trim();
+  $("delaybox").classList.toggle("hidden", !sample || done);
+  b.textContent = done ? "New query" : sample ? "Replay" : "Send";
+  b.disabled = !done && !sample && !typed;
+}
+$("act").addEventListener("click", () => {
+  if ($("text").disabled) reset(); else if ($("example").value) replay(); else finish();
+});
+$("text").addEventListener("input", updateAction);
+$("example").addEventListener("change", updateAction);
 $("agent").addEventListener("change", reset);
 
 /* replay: the server paces a whole request as server-sent events */
@@ -136,14 +147,13 @@ function replay() {
   es.onerror = () => { if (es.readyState === EventSource.CLOSED) return; es.close(); say("Replay failed (server not running, or a wrong API key)."); };
 }
 $("delay").addEventListener("input", () => { $("delaynum").textContent = $("delay").value + " ms"; });
-$("replay").addEventListener("click", replay);
 
 async function loadExamples() {
   try {
     const q = k => fetch(url("/api/examples", {set: "dev", tag: k, limit: 6})).then(r => r.json());
     const groups = await Promise.all([["plain", "plain"], ["correction", "with a correction"], ["late_constraint", "late constraint"], ["code_mixed", "Hindi-English"]]
       .map(async ([k, label]) => [label, (await q(k)).items]));
-    $("example").innerHTML = '<option value="">Pick a sample request...</option>' + groups.filter(([, items]) => items)
+    $("example").innerHTML = '<option value="">Replay a sample...</option>' + groups.filter(([, items]) => items)
       .map(([label, items]) => `<optgroup label="${label}">${items.map(i => `<option value="${i.id}">${esc(i.text.slice(0, 70))}</option>`).join("")}</optgroup>`).join("");
   } catch (_) {}
 }
@@ -164,11 +174,9 @@ async function loadResults() {
 }
 $("set").addEventListener("change", loadResults);
 
-document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
-  for (const t of ["live", "results"]) $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab);
-  if (b.dataset.tab === "results") loadResults();
-}));
+$("resultsbtn").addEventListener("click", () => { $("resultsdlg").showModal(); loadResults(); });
+$("closedlg").addEventListener("click", () => $("resultsdlg").close());
+$("resultsdlg").addEventListener("click", e => { if (e.target === $("resultsdlg")) $("resultsdlg").close(); });
 
 reset(); loadExamples();
 fetch(url("/api/info")).then(r => r.json()).then(i => { info = i; }).catch(() => {});

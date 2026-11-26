@@ -7,14 +7,15 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<aside>
+<header>
   <div class="brand">AgentX<small>ANTICIPATORY COMMERCE</small></div>
-  <button id="reset" class="solid">+ New request</button>
-  <nav>
-    <button data-tab="live" class="on">Agent</button>
-    <button data-tab="results">Results</button>
-  </nav>
-</aside>
+  <div class="top">
+    <details class="keybox"><summary>API key</summary>
+      <input id="key" type="password" placeholder="only if the server needs one" autocomplete="off">
+    </details>
+    <button id="resultsbtn" class="solid">Results</button>
+  </div>
+</header>
 
 <main id="tab-live">
   <div class="thread">
@@ -43,41 +44,30 @@
   <footer class="composer">
     <p id="status" class="status"></p>
     <div class="box">
-      <textarea id="text" rows="2" placeholder="black running shoes size nine, under two thousand..." autofocus></textarea>
-      <button id="finish" class="solid">Finish</button>
-    </div>
-    <div class="tweaks">
-      <label title="How the agent decides when to commit">Mode
-        <select id="agent">
+      <textarea id="text" rows="2" placeholder="Say what you want, e.g. black running shoes size nine, under two thousand..." autofocus></textarea>
+      <div class="bar2">
+        <select id="agent" title="How the agent decides when to commit">
           <option value="hybrid">Hybrid (recommended)</option>
           <option value="heuristic">Rules only</option>
           <option value="learned">Learned model only</option>
         </select>
-      </label>
-      <label title="Replays one of the public dev requests word by word, and scores it">Replay a sample
-        <select id="example"><option value="">Pick a sample request...</option></select>
-      </label>
-      <label title="Pause between words while replaying">Pause per word: <b id="delaynum">450 ms</b>
-        <input id="delay" type="range" min="0" max="1200" step="50" value="450">
-      </label>
-      <button id="replay">Replay</button>
-      <details><summary>Advanced</summary>
-        <label>API key (only if the server was started with one)
-          <input id="key" type="password" autocomplete="off">
+        <select id="example" title="Replay a public dev request word by word and score it"><option value="">Replay a sample...</option></select>
+        <label id="delaybox" class="hidden">pause <b id="delaynum">450 ms</b>
+          <input id="delay" type="range" min="0" max="1200" step="50" value="450">
         </label>
-      </details>
+        <span class="grow"></span>
+        <button id="act" class="solid" disabled>Send</button>
+      </div>
     </div>
     <p class="hint">A word is sent when you type a space and cannot be taken back. To correct yourself, say it: "black, no wait, white".</p>
   </footer>
 </main>
 
-<main id="tab-results" class="hidden">
-  <div class="thread">
-    <h2>Results on the public dev set</h2>
-    <select id="set"><option>dev</option><option>dev_extra</option></select>
-    <div id="results"></div>
-  </div>
-</main>
+<dialog id="resultsdlg">
+  <div class="dlghead"><h2>Results on the public dev set</h2><button id="closedlg" aria-label="Close">Esc</button></div>
+  <select id="set"><option>dev</option><option>dev_extra</option></select>
+  <div id="results"></div>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>
