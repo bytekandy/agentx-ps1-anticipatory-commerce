@@ -47,8 +47,11 @@ def search_filters(snapshot: Snapshot, config: Config = DEFAULT_CONFIG) -> Dict[
 
 def blocked_reason(snapshot: Snapshot, filters: Dict[str, Any], lexicon: Lexicon) -> Optional[str]:
     """Why no commit is possible yet, or None if the gates are open."""
+    if snapshot.unresolved:
+        words = ", ".join(u.label() for u in snapshot.unresolved)
+        return f"not understood, so no early commit: {words}"
     if not snapshot.settled:
-        return "unsettled: correction pending or number still growing"
+        return "unsettled: correction pending, number still growing or a cue awaiting its number"
     category = filters.get("category")
     if category is None:
         return "category not known"

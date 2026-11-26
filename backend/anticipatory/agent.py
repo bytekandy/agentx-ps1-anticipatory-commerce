@@ -33,6 +33,11 @@ class AnticipatoryAgent:
         self.trace: List[TraceRecord] = []
         self.words: List[str] = []
 
+    @property
+    def unresolved(self):
+        """What the shopper asked for that nothing in the shop answers to, as of the last word."""
+        return list(self.state.snapshot.unresolved)
+
     # -- the kit's interface -----------------------------------------------------------------
 
     def start(self, request_id) -> None:
@@ -52,7 +57,8 @@ class AnticipatoryAgent:
             correction_pending=snapshot.correction_pending,
             pending_slots=snapshot.pending_slots, searched=decision.searched,
             n_candidates=decision.n_candidates, action=decision.action,
-            product_id=decision.product_id, risk=decision.risk, reason=decision.reason)
+            product_id=decision.product_id, risk=decision.risk, reason=decision.reason,
+            unresolved=tuple(u.label() for u in snapshot.unresolved))
         self.trace.append(record)
         if self.on_trace:
             self.on_trace(record)

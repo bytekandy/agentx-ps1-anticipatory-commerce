@@ -130,6 +130,15 @@ CORRECTION_WORDS: FrozenSet[str] = frozenset({
 # Words that often open an afterthought ("and in navy", "oh, and size M").
 LATE_WORDS: FrozenSet[str] = frozenset({"and", "also", "aur", "plus", "oh", "additionally"})
 
+# Hindi and English filler: they carry no product constraint, so the unknown-word detector must not
+# take them for one ("mere liye dress", "uh, navy shirt"). A small closed class, like the cue sets.
+FILLER_WORDS: FrozenSet[str] = frozenset({
+    "uh", "um", "umm", "hmm", "hm", "er", "erm", "ah", "ok", "okay", "yeah",
+    "liye", "mere", "mujhe", "chahiye", "chahie", "dikhao", "dikha", "dikhana", "milega", "milegi",
+    "hai", "hain", "kya", "aapke", "aapka", "paas", "bhaiya", "bhai", "yaar", "na",
+    "wala", "wali", "wale", "ka", "ki", "ke", "ko", "se", "mein", "me", "baat", "kuch",
+})
+
 # ----------------------------------------------------------------------------- data types
 
 _PRIORITY = {"exact": 0, "variant": 1, "synonym": 2}
@@ -211,7 +220,8 @@ class Lexicon:
         self._build()
         self.known_words: FrozenSet[str] = frozenset(
             {w for key in self._table for w in key}
-            | {w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS | LATE_WORDS)
+            | {w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS | LATE_WORDS
+            | FILLER_WORDS)
         self.catalogue_words: FrozenSet[str] = frozenset(
             w for r in rows for text in (r.get("title", ""), r.get("description", ""))
             for w in re.findall(r"[a-z]+", text.lower()))

@@ -50,8 +50,15 @@ The agent code lives in the package `backend/anticipatory/` (standard library on
 
 ## Known limits
 
-- **The synonym list is hand-written.** `backend/anticipatory/lexicon.py` holds a seed list of about 90 synonyms (some read off the dev set, some guessed, the guesses marked in the code). A word that is not on it is not understood: the agent waits and answers at the end instead of committing early. A soft lexicon from pretrained word vectors is planned for after Round 1 (see the plan, finals prep).
+- **The synonym list is hand-written.** `backend/anticipatory/lexicon.py` holds a seed list of about 90 synonyms (some read off the dev set, some guessed, the guesses marked in the code). A synonym nobody listed ("trainers") is not understood. The agent then notices a word it cannot place (see below) and does not commit early. A soft lexicon from pretrained word vectors is planned for after Round 1 (see the plan, finals prep).
+- **Things we do not sell are noticed, not guessed.** A brand we do not stock ("from Nike"), a size that does not exist ("size 14", "4XL", "size 32 sandals"), or a colour or style we do not have ("purple shirt") is flagged as unresolved: the agent does not commit early, and the trace says what it could not match. No list of brands, sizes or colours is used. The structure of the request plus a general English word-frequency list decide.
 - Everything else the agent knows about products (categories, colours, brands, sizes, prices) is read from `catalogue.csv`; no dev request or answer is stored in the code.
+
+## Data sources
+
+- `backend/catalogue.csv`, `backend/dev.jsonl`, `backend/evaluate.py`, `backend/search.py`: the organisers' starter kit, unchanged.
+- `backend/anticipatory/data/english_words.tsv`: the 60,000 most frequent English words with their counts, from Peter Norvig's `count_1w.txt` (https://norvig.com/ngrams/count_1w.txt), a subset of the Google Web Trillion Word Corpus counts distributed by the Linguistic Data Consortium. The data is distributed for educational and research use; it is used here only to tell real words from typos and to rank how common a word is. Check the licence before any commercial use.
+- `backend/anticipatory/data/risk_model.json`: the learned risk model, trained by `backend/scripts/train_risk.py` on synthetic requests we generate ourselves.
 
 ## Working on this repo
 

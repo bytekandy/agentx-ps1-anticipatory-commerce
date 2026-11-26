@@ -193,12 +193,10 @@ class HybridRisk:
         self.learned = learned
         self.rules = HeuristicRisk(config)
         self.hold_words = config.risk.hold_words
-        self.confidence_floor = config.risk.rules_confidence_floor
 
     def p_wrong(self, features: RiskInput) -> float:
         if not features.settled:
             return self.rules.p_wrong(features)             # never safe, whatever the model says
-        if (features.quiet_words < self.hold_words or features.at_clause_end
-                or features.weakest_confidence < self.confidence_floor):
+        if features.quiet_words < self.hold_words or features.at_clause_end:
             return max(self.rules.p_wrong(features), self.learned.p_wrong(features))
         return self.learned.p_wrong(features)

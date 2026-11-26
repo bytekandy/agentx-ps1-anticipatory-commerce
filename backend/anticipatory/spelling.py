@@ -14,8 +14,13 @@ typed? By Bayes that is the word with the best
 Only words that name a product are corrected (categories, colours, brands, sizes), never cue
 words or numbers. A typed word is left alone when
 
-  * it is already a word we know, or an ordinary English word we must not "fix" ("than" is not
-    a mistyped "tan", "while" is not a mistyped "white");
+  * it is already a word we know;
+  * it is a real English word that is not vastly rarer than the shop word it resembles. A
+    large word-frequency list (`words.py`) says how common each word is, and a real word is
+    only treated as a typo if the shop word is at least `real_word_ratio` (100) times more
+    common. So "short" (106 million uses) is never turned into "shirt" (40 million), "skirt" and
+    "while" stay, and "runing" (100 thousand) does become "running" (500 million). No hand-written
+    list of words to protect is needed;
   * it is short (when both words have four letters only the cheapest edits are allowed;
     three letters or fewer are never corrected);
   * it starts with a different letter than every candidate, or
@@ -30,33 +35,7 @@ from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence,
 
 from .config import DEFAULT_CONFIG, SpellingConfig
 from .tokens import Token
-
-# Ordinary words a shopper uses around a request, and clothing words the catalogue does not
-# sell. They are never corrected: a typo-correct that turns "while" into "white", or "shorts"
-# into "shirts", is worse than missing a typo. The words that appear in the
-# catalogue's own titles and descriptions are added automatically (`Lexicon.catalogue_words`).
-COMMON_WORDS: FrozenSet[str] = frozenset("""
-about above after again also always another anyone anything around away back because been before
-being below best better between bring brought budget buying came care case cause change cheap
-cheaper check choose clean close come comes coming could dont done down each easy else enough even
-ever every everything fast feel find fine first flashy follow found from gift give given going good
-great hand happy have having help here hope hurry idea into just keep kind know last later least
-less let like likely line little long look looking made make makes many matter maybe mean means
-meant might more most much must need needs never next nice nothing offer often once only open order
-other over part party people perhaps pick place plan please plus price pretty quick quite rather
-really right same save say see seem seen send several shall should show shown since small some
-something soon sort sorry sound still such sure take tell than thank thanks that their them then
-there these they thing things think this those though thought through time today together told too
-took toward try under until upon used useful usual very want wanted wants wear week well went were
-what when where whether which while whole will wish with within without wonder work would write
-wrong year yeah years your yourself
-shorts short skirt skirts socks sock belt belts tie ties scarf scarves gloves sweater sweaters
-blazer blazers suit suits boots boot heels loafers slipper slippers sleeve sleeves collar pocket
-pockets laces strap straps trouser trousers leggings saree sarees lehenga shawl muffler towel
-earring earrings necklace ring bracelet sunglasses glasses bottle umbrella helmet
-aapke bhai bhaiya chahiye chahie dikha dikhao dikhana hain karo kitna kuch matlab milega mujhe nahi
-nahin paas wala wali yaar zara abhi bahut theek accha achha
-""".split())
+from .words import EnglishWords, english_words
 
 _ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
 
@@ -117,11 +96,13 @@ class SpellingCorrector:
     """Corrects single typed words against a weighted vocabulary. Results are cached."""
 
     def __init__(self, weights: Mapping[str, float], guard: Iterable[str] = (),
-                 config: SpellingConfig = DEFAULT_CONFIG.spelling):
+                 config: SpellingConfig = DEFAULT_CONFIG.spelling,
+                 english: Optional[EnglishWords] = None):
         self.cfg = config
+        self.english = english or english_words()
         self.weights = {w: v for w, v in weights.items() if len(w) >= config.min_length}
         self.known: FrozenSet[str] = frozenset(weights)
-        self.guard: FrozenSet[str] = frozenset(guard) | COMMON_WORDS
+        self.guard: FrozenSet[str] = frozenset(guard)
         self._cache: Dict[str, Optional[str]] = {}
 
     def limit(self, length: int) -> float:
@@ -145,12 +126,16 @@ class SpellingCorrector:
         if (not cfg.enabled or len(text) < cfg.min_length or not text.isascii()
                 or not text.isalpha() or text in self.known or text in self.guard):
             return None
+        typed_count = self.english.count(text)
         scored: List[Tuple[float, str]] = []
         for word, weight in self.weights.items():
             if abs(len(word) - len(text)) > 1 + (len(text) >= 7):
                 continue
             if cfg.same_first_letter and word[0] != text[0]:
                 continue
+            if typed_count and max(self.english.count(word), cfg.shop_floor_count) \
+                    < cfg.real_word_ratio * typed_count:
+                continue                            # a real word, not rare enough to be a typo
             cost = edit_cost(text, word, cfg, self.limit(max(len(text), len(word))))
             if cost is not None:
                 scored.append((math.log(weight) - cfg.channel_weight * cost, word))

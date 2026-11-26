@@ -30,7 +30,8 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import CORRECTION_WORDS, LATE_WORDS, PRICE_CUES, Lexicon
-from .slots import SlotMention, cue_awaiting_number, extract_mentions, size_fits_category
+from .slots import SlotMention, cue_awaiting_number, read_words, size_fits_category
+from .unknown import Unresolved, find_unresolved
 from .tokens import Token, make_token
 
 # Two-word markers that the single-word list cannot express ("make that XXL", "make it Kudova").
@@ -82,12 +83,15 @@ class Snapshot:
     at_clause_end: bool                     # the last word ended with , . ; ! ?
     quiet_words: int                        # words since the last mention ended
     cue_pending: bool = False               # the words end on a cue awaiting its number, or on "make"
+    unresolved: Tuple[Unresolved, ...] = () # constraints stated that nothing in the shop answers to
     unsettled_factor: float = 0.5
 
     @property
     def settled(self) -> bool:
-        """No correction on its way, no number still growing, no cue awaiting its number."""
-        return not self.correction_pending and not self.pending_slots and not self.cue_pending
+        """No correction on its way, no number still growing, no cue awaiting its number, and
+        no constraint stated that we cannot represent (an unknown brand, size or colour)."""
+        return (not self.correction_pending and not self.pending_slots and not self.cue_pending
+                and not self.unresolved)
 
     @property
     def filters(self) -> Dict[str, object]:
@@ -137,8 +141,8 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
                    final: bool = False) -> Snapshot:
     """Read the words so far into a snapshot. `final=True` marks the end of the request."""
     cfg = config.state
-    mentions = sorted(extract_mentions(tokens, lexicon, config, final=final),
-                      key=lambda m: m.start)
+    reading = read_words(tokens, lexicon, config, final=final)
+    mentions = sorted(reading.mentions, key=lambda m: m.start)
     markers = find_markers(tokens)
 
     events: Dict[str, List[_Event]] = {}
@@ -160,6 +164,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         events.setdefault(m.slot, []).append(_Event(m, confidence, marked is not None, late))
 
     category = _fold("category", events.get("category", []), cfg)
+    unresolved: List[Unresolved] = find_unresolved(reading, lexicon, config)
     beliefs: Dict[str, SlotBelief] = {}
     if category:
         beliefs["category"] = category
@@ -167,9 +172,16 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         if slot == "category":
             continue
         if slot == "size":
-            slot_events = [e for e in slot_events
-                           if size_fits_category(str(e.mention.value),
-                                                 category.value if category else None, lexicon)]
+            fitting = [e for e in slot_events
+                       if size_fits_category(str(e.mention.value),
+                                             category.value if category else None, lexicon)]
+            if not fitting:                    # a size was asked for that this category lacks
+                unresolved += [Unresolved("size", str(e.mention.value), e.mention.start,
+                                          e.mention.end,
+                                          f"the shop has no size {e.mention.value} for "
+                                          f"{category.value}")
+                               for e in slot_events if e.mention.via in ("size-cue", "size-after")]
+            slot_events = fitting
         belief = _fold(slot, slot_events, cfg)
         if belief:
             beliefs[slot] = belief
@@ -183,6 +195,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         pending_slots=tuple(pending),
         correction_pending=_correction_pending(markers, heard, words, cfg),
         cue_pending=_something_follows(tokens),
+        unresolved=tuple(sorted(unresolved, key=lambda u: u.start)),
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
         unsettled_factor=cfg.unsettled_factor,
