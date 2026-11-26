@@ -166,7 +166,7 @@ def _phrase_mention(tokens, i, phrase, config) -> SlotMention:
 
 
 def _size_cue_beside(tokens, start, end) -> bool:
-    before = start > 0 and tokens[start - 1].text in SIZE_CUES and not tokens[start - 1].clause_end
+    before = start > 0 and tokens[start - 1].text in SIZE_CUES
     after = end < len(tokens) and tokens[end].text in SIZE_CUES and not tokens[end - 1].clause_end
     return before or after
 
@@ -283,13 +283,13 @@ _MULTIWORD_CUES = tuple(cue for cue in set(PRICE_CUES) | _MIN_PRICE_CUES
 def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
     """The cue just before the number at `start`: ("size", None), ("price", slot) or None.
 
-    A cue followed by a pause ("under, ...") is not attached to the number. Filler words such
+    A pause after the cue ("size, nine", "under, 1500") does not detach it. Filler words such
     as "of" are skipped ("budget of 800").
     """
     j = start - 1
     while j >= 0 and tokens[j].text in _PRICE_FILLER and not tokens[j].clause_end:
         j -= 1
-    if j < 0 or tokens[j].clause_end:
+    if j < 0:
         return None
     if tokens[j].text in SIZE_CUES:
         return "size", None
@@ -308,7 +308,7 @@ def cue_awaiting_number(tokens: Sequence[Token]) -> bool:
     "within Rs.", "up to", "budget of", "size": the shopper is mid-phrase and a value is
     on its way. ("9 UK" also counts for one word: that cue closes a number already heard.)
     """
-    if not tokens or tokens[-1].clause_end:
+    if not tokens:
         return False
     return _cue_before(tokens, len(tokens)) is not None or _inside_cue(tokens)
 

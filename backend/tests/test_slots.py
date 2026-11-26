@@ -205,9 +205,10 @@ class PriceTest(SlotsTestCase):
         self.assertLess(bare.confidence, 0.9)
         self.assertGreater(bare.confidence, 0.5)
 
-    def test_a_cue_followed_by_a_pause_does_not_attach(self):
+    def test_a_cue_followed_by_a_pause_still_attaches_to_its_number(self):
         self.assertEqual([m for m in self.read("watch under, hmm") if m.slot == "max_price"], [])
-        self.assertEqual(self.one("watch under, 2000", "max_price").via, "bare")
+        self.assertEqual(self.one("watch under, 2000", "max_price").via, "price-cue")
+        self.assertEqual(self.one("shoes size, 9", "size").via, "size-cue")
 
     def test_out_of_range_numbers_are_not_prices(self):
         self.assertEqual([m for m in self.read("watch under 50") if m.slot == "max_price"], [])
@@ -221,10 +222,11 @@ class CueAwaitingNumberTest(SlotsTestCase):
         for text in ("under", "budget of", "within Rs.", "size", "UK", "up to"):
             with self.subTest(text=text):
                 self.assertTrue(cue_awaiting_number(tokenize_text("black cap " + text)))
+        self.assertTrue(cue_awaiting_number(tokenize_text("black cap under,")))     # a pause does not detach it
         for text in ("up", "not more", "less", "no more"):          # partway through a cue
             with self.subTest(text=text):
                 self.assertTrue(cue_awaiting_number(tokenize_text("black cap " + text)))
-        for text in ("under 500", "black cap", "size 9", "", "under,"):
+        for text in ("under 500", "black cap", "size 9", ""):
             with self.subTest(text=text):
                 self.assertFalse(cue_awaiting_number(tokenize_text(text)))
 
