@@ -7,61 +7,68 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>Anticipatory commerce agent</h1>
+<aside>
+  <div class="brand">AgentX<small>ANTICIPATORY COMMERCE</small></div>
+  <button id="reset" class="solid">+ New request</button>
   <nav>
     <button data-tab="live" class="on">Agent</button>
     <button data-tab="results">Results</button>
   </nav>
-  <div class="settings">
+  <div class="group">
+    <span class="cap">REPLAY</span>
+    <select id="example"><option value="">Pick a dev request...</option></select>
+    <label>speed <input id="delay" type="range" min="0" max="1200" value="450"></label>
+    <button id="replay">Replay</button>
+  </div>
+  <div class="group">
+    <span class="cap">SETTINGS</span>
     <label>Agent
       <select id="agent"><option>hybrid</option><option>heuristic</option><option>learned</option></select>
     </label>
-    <label>API key <input id="key" type="password" placeholder="only if the server needs one" autocomplete="off"></label>
+    <label>API key <input id="key" type="password" placeholder="only if needed" autocomplete="off"></label>
   </div>
-</header>
+</aside>
 
 <main id="tab-live">
-  <section class="input">
-    <h2>Say what you want, one word at a time</h2>
-    <textarea id="text" rows="2" placeholder="black running shoes size nine, under two thousand..." autofocus></textarea>
-    <p class="hint">Each word is sent when you type a space. Words already sent cannot be changed (the agent cannot take a word back): to correct yourself, say it, like "black, no wait, white".</p>
-    <div class="row">
-      <button id="finish" class="primary">Finish</button>
-      <button id="reset">New request</button>
-      <span class="sep"></span>
-      <select id="example"><option value="">Replay a dev request...</option></select>
-      <label>speed <input id="delay" type="range" min="0" max="1200" value="450"></label>
-      <button id="replay">Replay</button>
+  <div class="thread">
+    <section class="hero">
+      <h1>Your shopping conductor.</h1>
+      <p>Say what you want, one word at a time. The agent commits as soon as it is sure.</p>
+    </section>
+
+    <div class="turn me"><span class="who">YOU</span><div id="chips" class="chips"></div></div>
+
+    <div class="turn bot reply">
+      <span class="who">AGENT</span>
+      <div class="body">
+        <div id="slots" class="slots"></div>
+        <div class="meter"><span>confidence</span><div class="bar"><i id="conf"></i></div><b id="confnum">0.00</b></div>
+        <div id="flags" class="flags"></div>
+        <p id="reason" class="reason"></p>
+        <p id="risk" class="risk"></p>
+        <div id="commit" class="card empty"></div>
+        <div id="final" class="card empty"></div>
+        <div id="evaluation" class="card hidden"></div>
+      </div>
     </div>
+  </div>
+
+  <footer class="composer">
     <p id="status" class="status"></p>
-  </section>
-
-  <section class="words"><h2>Words</h2><div id="chips" class="chips"></div></section>
-
-  <section class="reading">
-    <h2>What the agent understood</h2>
-    <div id="slots" class="slots"></div>
-    <div class="meter"><span>confidence</span><div class="bar"><i id="conf"></i></div><b id="confnum">0.00</b></div>
-    <div id="flags" class="flags"></div>
-    <p id="reason" class="reason"></p>
-    <p id="risk" class="risk"></p>
-  </section>
-
-  <section class="answer">
-    <h2>Answer</h2>
-    <div id="commit" class="card empty">No commit yet. The agent waits until it is sure.</div>
-    <div id="final" class="card empty">The final answer appears when the request is finished.</div>
-    <div id="evaluation" class="card hidden"></div>
-  </section>
+    <div class="box">
+      <textarea id="text" rows="2" placeholder="black running shoes size nine, under two thousand..." autofocus></textarea>
+      <button id="finish" class="solid">Finish</button>
+    </div>
+    <p class="hint">A word is sent when you type a space and cannot be taken back. To correct yourself, say it: "black, no wait, white".</p>
+  </footer>
 </main>
 
 <main id="tab-results" class="hidden">
-  <section>
+  <div class="thread">
     <h2>Results on the public dev set</h2>
     <select id="set"><option>dev</option><option>dev_extra</option></select>
     <div id="results"></div>
-  </section>
+  </div>
 </main>
 <script src="app.js"></script>
 </body>

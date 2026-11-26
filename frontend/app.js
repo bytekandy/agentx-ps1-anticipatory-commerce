@@ -21,9 +21,10 @@ function reset() {
   $("chips").innerHTML = ""; $("conf").style.width = "0"; $("confnum").textContent = "0.00";
   $("flags").innerHTML = ""; $("reason").textContent = ""; $("risk").textContent = "";
   $("slots").innerHTML = SLOTS.map(([k, label]) => `<div class="slot none" id="slot-${k}"><span>${label}</span><b>not mentioned</b></div>`).join("");
-  setCard("commit", null, "No commit yet. The agent waits until it is sure.");
-  setCard("final", null, "The final answer appears when the request is finished.");
+  setCard("commit", null, "");
+  setCard("final", null, "");
   $("evaluation").classList.add("hidden"); say();
+  document.querySelector("#tab-live .thread").classList.add("fresh");
 }
 
 function setCard(id, product, empty, extra = "", cls = "") {
@@ -36,6 +37,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": 
 
 function showWord(e) {
   const t = e.trace; state.words = e.seq;
+  document.querySelector("#tab-live .thread").classList.remove("fresh");
   const chip = document.createElement("span");
   chip.className = "chip" + (e.commit ? " commit" : t.settled ? "" : " hold");
   chip.innerHTML = esc(e.word) + (e.commit ? "<small>commit</small>" : "");
@@ -140,7 +142,7 @@ async function loadExamples() {
     const q = k => fetch(url("/api/examples", {set: "dev", tag: k, limit: 6})).then(r => r.json());
     const groups = await Promise.all([["plain", "plain"], ["correction", "with a correction"], ["late_constraint", "late constraint"], ["code_mixed", "Hindi-English"]]
       .map(async ([k, label]) => [label, (await q(k)).items]));
-    $("example").innerHTML = '<option value="">Replay a dev request...</option>' + groups.filter(([, items]) => items)
+    $("example").innerHTML = '<option value="">Pick a dev request...</option>' + groups.filter(([, items]) => items)
       .map(([label, items]) => `<optgroup label="${label}">${items.map(i => `<option value="${i.id}">${esc(i.text.slice(0, 70))}</option>`).join("")}</optgroup>`).join("");
   } catch (_) {}
 }
