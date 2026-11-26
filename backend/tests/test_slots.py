@@ -102,6 +102,16 @@ class SizeNumberTest(SlotsTestCase):
         self.assertSlot(text, "max_price", 3000)
         self.assertSlot("sneakers size 9 UK 3000", "max_price", 3000)
 
+    def test_a_price_cue_that_follows_a_number_is_not_shared_with_the_next_one(self):
+        for text in ("2100 se kam 34 waist", "2100 tak 34 waist", "2100 ke andar 34 waist"):
+            with self.subTest(text=text):
+                self.assertSlot("blue jeans " + text, "max_price", 2100)
+                self.assertSlot("blue jeans " + text, "size", "34")
+
+    def test_a_price_cue_before_a_number_that_is_no_price_falls_through(self):
+        self.assertSlot("sandals under 9", "size", "9")           # weak, but not thrown away
+        self.assertLess(self.one("sandals under 9", "size").confidence, 0.5)
+
     def test_size_beside_a_price_stays_a_size(self):
         text = "sandals size 9 under 1500"
         self.assertSlot(text, "size", "9")

@@ -42,6 +42,7 @@ _MIN_PRICE_CUES = frozenset({
 
 # Cues that follow the number: "1500 tak", "1500 or less". The cues that precede a number
 # ("under", "budget") are deliberately absent, or "size 9 under 1500" would make 9 a price.
+_POSTFIX_ONLY = frozenset({("tak",), ("se", "kam"), ("ke", "andar")})   # never a cue BEFORE a number
 _POSTFIX_PRICE_CUES = frozenset({
     ("tak",), ("se", "kam"), ("ke", "andar"), ("rupees",), ("rupee",), ("rs",), ("inr",),
     ("max",), ("maximum",), ("or", "less"), ("or", "below"), ("or", "under"),
@@ -163,13 +164,15 @@ def _number_mention(tokens, start, reading: NumberReading, lexicon: Lexicon,
     if before:
         kind, slot = before
         if kind == "price":
-            return _price(slot, start, end, reading, config.slots.confidence_price_cued,
-                          "price-cue", config)
-        if size:
-            return _size(start, end, reading, size, config.slots.confidence_size_cued,
-                         "size-cue")
-        # A size cue before a number that is no real size ("10 UK 3000 max": the UK belongs
-        # to the 10), so look at the other clues.
+            mention = _price(slot, start, end, reading, config.slots.confidence_price_cued,
+                             "price-cue", config)
+        else:
+            mention = (_size(start, end, reading, size, config.slots.confidence_size_cued,
+                             "size-cue") if size else None)
+        if mention:
+            return mention
+        # The cue does not fit this number ("under 50" is no price, "10 UK 3000 max": the UK
+        # belongs to the 10), so look at the other clues.
 
     if _has_currency_mark(tokens[start]):               # "Rs.1500", "₹3,000", "1500/-"
         return _price("max_price", start, end, reading, config.slots.confidence_price_cued,
@@ -235,7 +238,8 @@ def _build_cue_table() -> Dict[str, List[Tuple[Tuple[str, ...], str]]]:
     table: Dict[str, List[Tuple[Tuple[str, ...], str]]] = {}
     for cues, slot in ((PRICE_CUES, "max_price"), (_MIN_PRICE_CUES, "min_price")):
         for cue in cues:
-            table.setdefault(cue[-1], []).append((cue, slot))
+            if cue not in _POSTFIX_ONLY:       # "1500 tak 34 waist": tak belongs to the 1500
+                table.setdefault(cue[-1], []).append((cue, slot))
     return table
 
 
