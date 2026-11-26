@@ -13,7 +13,7 @@ from anticipatory.tokens import tokenize, tokenize_text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from make_training_data import (Generator, build_examples, number_words,  # noqa: E402
-                                singular)
+                                singular, slip)
 from train_risk import fit, group, simulate, to_input, vector  # noqa: E402
 
 SLOTS = ("category", "colour", "size", "brand", "max_price")
@@ -101,6 +101,33 @@ class GeneratorTest(TrainingTestCase):
     def test_singular(self):
         self.assertEqual([singular(w) for w in ("watches", "dresses", "shirts", "jeans")],
                          ["watch", "dress", "shirt", "jean"])
+
+
+class TypoGeneratorTest(TrainingTestCase):
+    def test_default_generator_writes_no_typos(self):
+        from anticipatory.spelling import SpellingCorrector  # noqa: F401
+        fixes = 0
+        for req in self.requests[:400]:
+            fixes += sum(bool(self.lex.corrector.correct(t.text)) for t in tokenize(req["words"]))
+        self.assertEqual(fixes, 0)
+
+    def test_typo_rate_puts_typos_in_product_words_only(self):
+        generator = Generator(self.rows, 5, typo_rate=1.0)
+        fixed = numbers = 0
+        for _ in range(200):
+            req = generator.request()
+            for t in tokenize(req["words"]):
+                fixed += bool(self.lex.corrector.correct(t.text))
+                numbers += t.text.isdigit() and self.lex.corrector.correct(t.text) is not None
+        self.assertGreater(fixed, 100)
+        self.assertEqual(numbers, 0)
+
+    def test_slip_changes_a_word_but_keeps_its_first_letter(self):
+        rng = random.Random(1)
+        for word in ("sneakers", "running", "backpack", "northweft"):
+            for _ in range(20):
+                typed = slip(word, rng)
+                self.assertEqual(typed[0], word[0])
 
 
 class ExamplesTest(TrainingTestCase):

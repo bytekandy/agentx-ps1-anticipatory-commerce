@@ -86,9 +86,27 @@ HINDI_THOUSANDS = {1: "ek", 2: "do", 3: "teen", 4: "chaar", 5: "paanch", 6: "chh
                    8: "aath", 9: "nau"}
 
 
+def slip(word: str, rng: random.Random) -> str:
+    """One common typing slip in a word of five letters or more: two letters swapped, a
+    neighbouring key pressed, a letter doubled or a middle letter dropped."""
+    from anticipatory.spelling import NEIGHBOURS
+    i = rng.randrange(1, len(word) - 1)
+    kind = rng.choice(["swap", "neighbour", "double", "drop"])
+    if kind == "swap":
+        return word[:i] + word[i + 1] + word[i] + word[i + 2:]
+    if kind == "neighbour" and word[i] in NEIGHBOURS:
+        return word[:i] + rng.choice(sorted(NEIGHBOURS[word[i]])) + word[i + 1:]
+    if kind == "double":
+        return word[:i] + word[i] + word[i:]
+    return word[:i] + word[i + 1:]
+
+
 class Generator:
-    def __init__(self, rows: List[Dict[str, str]], seed: int = 0):
+    def __init__(self, rows: List[Dict[str, str]], seed: int = 0, typo_rate: float = 0.0):
+        """`typo_rate` is the chance that a category, colour or brand phrase contains a typo.
+        Dev has none, so training leaves it at 0; robustness checks raise it."""
         self.rows = rows
+        self.typo_rate = typo_rate
         self.rng = random.Random(seed)
         self.catalog = InMemoryCatalog(rows)
         self.by_category: Dict[str, List[Dict[str, str]]] = {}
@@ -219,14 +237,16 @@ class Generator:
 
         def phrase(slot: str, value: Any, attached: bool = False) -> str:
             if slot == "category":
-                return self.category_phrase(value)
-            if slot == "colour":
-                return self.colour_phrase(value, standalone=not attached)
-            if slot == "brand":
-                return self.brand_phrase(value, attached)
-            if slot == "size":
+                text = self.category_phrase(value)
+            elif slot == "colour":
+                text = self.colour_phrase(value, standalone=not attached)
+            elif slot == "brand":
+                text = self.brand_phrase(value, attached)
+            elif slot == "size":
                 return self.size_phrase(value, category)
-            return self.price_phrase(value)
+            else:
+                return self.price_phrase(value)
+            return self.with_typo(text)
 
         wrong_value = self.wrong_value(corrected, filters) if corrected else None
         delayed = bool(corrected) and rng.random() < 0.42
@@ -288,6 +308,17 @@ class Generator:
         text = " ".join(p for p in parts if p).replace(" ,", ",").strip()
         return {"words": text.split(), "text": text, "target": target["product_id"],
                 "filters": filters, "tags": tags}
+
+    def with_typo(self, text: str) -> str:
+        """Maybe put a typo in the longest word of a phrase (only words of 5 letters or more)."""
+        if self.typo_rate <= 0 or self.rng.random() >= self.typo_rate:
+            return text
+        words = text.split(" ")
+        i = max(range(len(words)), key=lambda k: len(words[k]))
+        if len(words[i]) < 5 or not words[i].isalpha():
+            return text
+        words[i] = slip(words[i], self.rng)
+        return " ".join(words)
 
     def pause(self, p: float) -> str:
         return "," if self.rng.random() < p else ""
@@ -353,9 +384,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--count", type=int, default=5)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--typo-rate", type=float, default=0.0)
     args = parser.parse_args()
     rows = load_rows()
-    generator = Generator(rows, args.seed)
+    generator = Generator(rows, args.seed, args.typo_rate)
     for _ in range(args.count):
         req = generator.request()
         print(json.dumps({k: req[k] for k in ("text", "filters", "tags")}, ensure_ascii=False))

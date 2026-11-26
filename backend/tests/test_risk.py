@@ -124,6 +124,12 @@ class HybridRiskTest(unittest.TestCase):
     def test_a_cautious_model_also_blocks_a_fresh_state(self):
         self.assertEqual(self.hybrid(1.0).p_wrong(features(quiet_words=0)), 1.0)
 
+    def test_a_value_read_with_low_confidence_keeps_the_rules_caution(self):
+        calm_but_shaky = features(quiet_words=5, weakest_confidence=0.6)
+        self.assertEqual(self.hybrid(0.0).p_wrong(calm_but_shaky),
+                         HeuristicRisk().p_wrong(calm_but_shaky))
+        self.assertGreater(self.hybrid(0.0).p_wrong(calm_but_shaky), 0.04)
+
     def test_unsettled_is_never_safe_even_when_calm(self):
         self.assertEqual(self.hybrid(0.0).p_wrong(features(quiet_words=5, settled=False)), 1.0)
 
