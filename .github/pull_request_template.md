@@ -2,7 +2,7 @@
 <!-- What this stage delivers, in a few lines. -->
 
 ## Stage
-<!-- Stage number and name from docs/round1-plan.md, for example: Stage 2 - Vocabulary -->
+<!-- Stage number and short name, for example: Stage 2 - Vocabulary -->
 
 ## Exit criteria
 <!-- Copy the stage's exit criteria and tick each one. -->

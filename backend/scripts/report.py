@@ -179,7 +179,7 @@ def render_cost(data: Dict[str, Any], dev_requests: int) -> str:
         ("size on disk: code / word list / risk model",
          f"{code_kb:.0f} KB / {disk_kb(package / 'data' / 'english_words.tsv'):.0f} KB / "
          f"{disk_kb(package / 'data' / 'risk_model.json'):.1f} KB"),
-        ("dependencies", "Python 3.9+ standard library only"),
+        ("dependencies", "Python 3.14, standard library only"),
     ]
     return "\n".join(["## Cost, speed and size", "", "Measured on the dev set, on the machine that generated "
                       "this file (timings vary a little from run to run).", "",

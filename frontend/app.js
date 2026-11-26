@@ -208,5 +208,14 @@ $("resultsbtn").addEventListener("click", () => { $("resultsdlg").showModal(); l
 $("closedlg").addEventListener("click", () => $("resultsdlg").close());
 $("resultsdlg").addEventListener("click", e => { if (e.target === $("resultsdlg")) $("resultsdlg").close(); });
 
+/* light and dark: the choice is remembered in this browser */
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("themebtn").textContent = theme === "light" ? "Dark mode" : "Light mode";
+  try { localStorage.setItem("theme", theme); } catch (_) {}
+}
+$("themebtn").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
+try { setTheme(localStorage.getItem("theme") === "light" ? "light" : "dark"); } catch (_) { setTheme("dark"); }
+
 reset(); loadExamples();
 fetch(url("/api/info")).then(r => r.json()).then(i => { info = i; }).catch(() => {});

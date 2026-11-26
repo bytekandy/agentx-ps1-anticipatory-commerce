@@ -1,6 +1,6 @@
 # Assumptions, data sources and the evidence behind the numbers
 
-Written for the Stage 9 review. It answers four questions: what data is used besides the
+Kept up to date through the final test (Stage 19). It answers four questions: what data is used besides the
 catalogue, what we assumed, which numbers are optimistic because dev influenced a choice, and what
 was verified. Every figure below was measured; where something is a guess, it says so.
 
@@ -12,7 +12,7 @@ was verified. Every figure below was measured; where something is a guess, it sa
 | Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 8,000 for validation, built from random catalogue products and hand-written phrasing pools | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
 | `anticipatory/data/risk_model.json` | The trained weights | Output of `scripts/train_risk.py` | Runtime risk estimate | Yes (0.8 KB) |
 | `data/dev_extra.jsonl` | **Hand-written** test requests (87), filled from real catalogue products | `scripts/build_dev_extra.py` | A test set with phrasing dev does not contain | Yes |
-| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during this review | Estimating generalisation | No (scratch) |
+| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch) |
 | `anticipatory/data/english_words.tsv` | **External.** The 60,000 most frequent English words with counts | Peter Norvig's `count_1w.txt` (Google web corpus counts via the LDC; educational and research use; user accepted for a hackathon) | Telling real words from typos and names | Yes (912 KB) |
 | Seed synonyms, cue words, number words, fillers | **Hand-written** language knowledge: about 90 synonyms, price and size cues, English and Hindi number words, Hindi and English fillers, correction markers | Me; part read off dev, part guessed (marked in the code) | The reader | Yes (`lexicon.py`, `numbers.py`) |
 
@@ -98,44 +98,31 @@ about 0.4 points of the final score), and a score between about 40.5 (phrasing a
 `dev_extra`) and 44 (phrasing like dev). The score floor for a perfect reader that never commits
 early is 40.0, and the cut-off is 60% of the baseline, 12.0.
 
-## 5. Verification done for this review
-Everything ran on a fresh clone of the PR branch, except where noted.
-- **Clean room:** 338 tests passed from `backend/` and from the repo root (344 after the fixes
-  below); the kit baseline, `agent.py`, `agent_heuristic.py` and `agent_learned.py` score as
-  documented; the agent runs from another working directory; `results.jsonl` and
-  `results_dev_extra.jsonl` regenerate **byte for byte**.
-- **Independent scorer:** a re-implementation of the formula, written from the README and not from
-  `evaluate.py`, reproduces every per-request score in both committed logs exactly (difference 0).
-- **Runtime rules (audit hook and spy):** the shipped package never reads dev files and never
-  imports the kit's `search`. During 387 requests the only file opened after construction was
-  `catalogue.csv`, opened by the kit's own `search.py` the first time it was called (its lazy
-  index). All 460 searches went through the counted tool, asked for at most 50 results, and
-  used only valid filters.
-- **Causality (no lookahead):** for all 387 requests, every proper prefix was replayed in a fresh
-  run: 4,440 prefixes, 0 outputs that differed from the full run.
-- **Pin point:** `finish()` on only the words up to the oracle pin returns the target in 386 of
-  387 requests.
-- **Metamorphic tests (the final answer must not change), 387 requests each:** uppercasing,
-  lowercasing, appending "please thanks", prepending "hey, do you have" or "yo bro", doubling
-  "size": 0 changes and 0 wrong commits. A filler "hmm," after the first word: 1 change. A comma
-  after every third word: 34 changes and 1 wrong commit, all caused by a comma splitting a phrase
-  ("t, shirt", "extra, large", "navy, blue").
-- **Scale and determinism:** 20,000 synthetic requests, 0 exceptions, accuracy 0.9993, replay
-  identical. 20,000 fuzz requests: 0 exceptions; never more than one commit; every commit
-  consistent with the agent's own reading; the final answer always a real product or none.
-- **Hostile input and long requests:** Devanagari, emoji, control characters, a 20,000-letter word,
-  a 400-digit number, SQL-looking text, blank words; 20,000 words in 235 ms (the cost per word was
-  quadratic until Stage 9, now capped).
-- **Python version:** everything ran on Python 3.14, which is the supported version. Earlier versions are not claimed.
+## 5. Verification
+### Final test (Stage 19), on a fresh clone of `main`
+- **Tests:** 467 pass with the server extras installed; 395 pass and 6 skip without them (the agent's own tests need only Python).
+- **Scores (official `evaluate.py`):** `agent.py` 43.5 on dev, 0 wrong commits; `agent_heuristic.py` 41.6; `agent_learned.py` 43.6 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.5, 0 wrong commits; kit baseline 20.0 and 31.3.
+- **Reproducible:** `scripts/report.py` regenerates `results.jsonl` and `results_dev_extra.jsonl` byte for byte.
+- **Kit files untouched:** `catalogue.csv`, `dev.jsonl`, `evaluate.py`, `search.py` and `README.md` in `backend/` are identical to the first commit.
+- **Determinism and causality:** 80 random requests run twice give identical outputs, and every proper prefix (939) replayed in a fresh run matches the full run exactly: no lookahead.
+- **Hostile input:** Devanagari, emoji, control characters, a 20,000-letter word, a 400-digit number, SQL-looking text and empty words cause no error; 3,000 random word-soup requests cause no exception.
+- **Server and page:** the live server answers health checks; the page passes its 15-step jsdom end-to-end check against the real agent; the WebSocket client gets the right final answer; `scripts/ask.py` works in a terminal.
 
-### Bugs this review found, now fixed
-1. "price cap 2000" read "cap" as the category caps. Fix: the cues "price cap", "budget cap" and
-   "spending cap" claim the word. Found by the blind set.
-2. A size glued to its cue ("size9", "UK10", "sz10", "w32") was not read. Fix: the tokenizer splits
-   it into two tokens.
-Both have tests; dev and `dev_extra` scores are unchanged by them.
+### Earlier review (Stage 9). Not repeated after the later reader fixes, so treat as historical
+- **Independent scorer:** a re-implementation of the formula, written from the README and not from `evaluate.py`, reproduced every per-request score in both committed logs exactly.
+- **Runtime rules (audit hook and spy):** the shipped package never reads dev files and never imports the kit's `search`. During 387 requests the only file opened after construction was `catalogue.csv`, opened by the kit's own `search.py`. All 460 searches went through the counted tool, asked for at most 50 results and used only valid filters.
+- **Pin point:** `finish()` on only the words up to the oracle pin returned the target in 386 of 387 requests.
+- **Metamorphic tests (the final answer must not change):** uppercasing, lowercasing, appending "please thanks", prepending "hey, do you have" or "yo bro", doubling "size": 0 changes, 0 wrong commits. A comma after every third word changed 34 of 383 answers (1 wrong commit) then; after Stages 13 and 16 it changes 7 (0 wrong commits), and typos in size, price and correction words changed 17 answers (5 wrong commits) then and 0 now.
+- **Scale:** 20,000 synthetic requests with 0 exceptions and accuracy 0.9993; 20,000 word-soup requests with 0 exceptions, never more than one commit.
 
-## 6. Known limitations (after Stage 14)
+### Bugs found by reviews, now fixed
+1. "price cap 2000" read "cap" as the category caps (blind set). The cues "price cap", "budget cap" and "spending cap" now claim the word.
+2. A size glued to its cue ("size9", "UK10", "sz10", "w32") was not read. The tokenizer now splits it.
+3. A comma inside a phrase ("navy, blue", "t, shirt") split it, and a comma after a cue detached its number (Stages 13 and 16).
+4. Typos in size, price and correction words were ignored, and the filter state read uncorrected words (Stage 13).
+5. A half size ("size 10.5") was silently dropped; it is now an unresolved size (Stage 14).
+
+## 6. Known limitations
 Resolved or decided; the open ones come first.
 
 - **Synonyms outside the seed list are not understood** ("sliders", "lowers"). The agent notices a
@@ -185,3 +172,12 @@ be taught words by use. This needs no external data.
   price); it only learns a word that appears in a correction or an accepted request; the server
   has to be restarted to use new words. A shared learned file could be poisoned by bad feedback;
   there is no per-user separation.
+
+## 8. What the dev set shows (`scripts/analyze_dev.py` reproduces these)
+- **The score is mostly reading correctly.** The baseline's 20.0 comes from accuracy 0.527. Reading every request correctly and never committing early scores 40.0 (the floor); early commits add at most about 10 points, and every wrong commit takes back 1.0.
+- **The ceiling is low and uneven.** A perfect early committer would save 16.3% of each request (plain 19.0%, correction 12.2%, late constraint 9.3%, code-mixed 20.0%); for 34% of requests the target is only pinned by the last word. Size completes the pin in 37% of requests (price 19%, colour 14%, brand 11%, category 2%).
+- **Only corrections endanger an early commit.** Every stated value is consistent with the target, so a unique match from correctly read values can only be overturned by a correction or a misread. 55 requests (18%) correct a slot (size 23, colour 18, brand 13, category 1), and the replacement comes 1 to 3 words after the marker.
+- **Searching before the size is known is wasted.** Mean candidates as slots are added (category, colour, brand, size, price): 80, 17, 7.9, 1.5, 1.0. The agent therefore searches only when the size is known or the category has none.
+- **Number words are ambiguous word by word.** "eight" may be size 8 or the start of "eight hundred"; price phrases run up to four words, so a number word is never acted on until it is settled.
+- **The vocabulary is small but the hidden set has unseen wording:** 300 requests use only 283 distinct tokens, which is why plurals, spelling variants, number words and Hindi forms are generalised in the lexicon rather than copied from dev.
+- **Reference agents (kit scorer):** no early commit with perfect reading 40.0; commit at the first unique product 32.7 (22 wrong commits); marker-aware with a one-word hold 39.6 (8 wrong commits). Our hybrid reaches 43.5 with none.
