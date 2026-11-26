@@ -39,13 +39,13 @@ Measured on the dev set, on the machine that generated this file (timings vary a
 |  |  |
 |---|---|
 | language model calls per request | 0 (rules, a 22-weight logistic regression, a word list) |
-| per-word latency, mean / median / p95 / p99 / max | 0.086 / 0.064 / 0.396 / 0.435 / 8.221 ms |
-| CPU per request (the whole request, including searches) | 1.52 ms |
-| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 75 ms |
+| per-word latency, mean / median / p95 / p99 / max | 0.088 / 0.067 / 0.400 / 0.439 / 8.280 ms |
+| CPU per request (the whole request, including searches) | 1.55 ms |
+| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 73 ms |
 | memory (process peak, with all agents and data loaded) | 36 MB |
 | searches per request | 1.19 |
 | extrapolated: one million requests on one core | 0.4 CPU-hours, no per-request API cost |
-| size on disk: code / word list / risk model | 102 KB / 912 KB / 0.8 KB |
+| size on disk: code / word list / risk model | 103 KB / 912 KB / 0.8 KB |
 | dependencies | Python 3.9+ standard library only |
 
 ## dev_extra
@@ -88,5 +88,5 @@ The default asks the hand-coded rules while a value is fresh or just followed by
 | agent | dev score | dev wrong commits | dev earliness | dev_extra score | dev_extra wrong commits | dev_extra accuracy |
 |---|---|---|---|---|---|---|
 | hybrid (default) | 43.5 | 0 | 6.4% | 40.5 | 0 | 0.989 |
-| rules only | 41.6 | 0 | 3.2% | 41.7 | 1 | 0.989 |
+| rules only | 41.6 | 0 | 3.2% | 41.5 | 1 | 0.989 |
 | learned model only | 43.6 | 2 | 7.9% | 41.9 | 0 | 0.989 |

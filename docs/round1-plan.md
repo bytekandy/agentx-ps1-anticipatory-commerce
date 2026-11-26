@@ -20,20 +20,22 @@ Hard deadline for Round 1: **30 Nov 2026, 11:59 PM IST**. The stages below have 
 - Score on dev: floor 40.0 (perfect reading with no early commit), goal 43 to 46, ceiling about 50. Below 40 means the early-commit logic is losing points.
 - Efficiency: about 1.5 searches per request or fewer (one extra search costs 2 points); well under 5 ms per word.
 
+**Status against the targets (Stage 9 review, see `docs/assumptions-and-data.md`):** wrong commits 0 on dev (300) and on `dev_extra` (87), but **0.25% of 20,000 synthetic requests**, so zero on the hidden set is likely, not guaranteed; accuracy 1.000 on dev against the 0.527 baseline; score 43.5 on dev (goal 43 to 46); 1.19 searches per request; 0.09 ms per word on average.
+
 ---
 
 ## 2. Design principles (how we build)
 
 1. **Safety first.** A wrong commit costs about 1.0 plus lost earliness; one word earlier gains about 0.045. The default action is always "wait".
 2. **Layered, pure core.** Reading words (pure functions) -> filter state -> decision policy -> orchestration -> I/O adapter. Only the outermost layer touches `tools.search`.
-3. **Dependency inversion.** The agent depends on a tiny `CatalogPort` interface. Tests use a fake catalogue; runtime uses the counted `tools.search`. The filter reader sits behind an interface too, so an LLM reader could replace the rules later (only when the user says so).
-4. **One source of tunables.** All thresholds and limits live in `config.py`, as frozen dataclasses grouped per area. No magic numbers in logic.
+3. **Dependency inversion.** The agent depends on a tiny `CatalogPort` interface. Tests use a fake catalogue; runtime uses the counted `tools.search`. The risk model sits behind an interface too (`RiskModel`: rules, learned and hybrid implementations). The slot reader does not, so an LLM reader would first need an interface added (only when the user says so).
+4. **One source of tunables.** Thresholds and limits live in `config.py`, as frozen dataclasses grouped per area. A few structural constants stay in code (feature scaling in `risk.py`, the extra-size pattern in `unknown.py`, the rule that a size under 20 is settled early in `slots.py`).
 5. **Deterministic and reproducible.** No randomness, no network. Same input gives the same output.
 6. **Observable.** Every word produces a trace record (filters, confidences, candidates, action, reason). Used for debugging, analysis, the UI and the demo video.
 7. **Test pyramid.** Unit tests for pure modules, scenario tests for corrections and late constraints, benchmark runs through `evaluate.py`.
 8. **Time-boxed simplicity (YAGNI).** Python standard library only for the agent, a small flat package, no frameworks. Add structure only when it earns its place.
 9. **Kit immutability.** The five kit files in `backend/` are never edited.
-10. **Bounded cost.** O(1) work per word; the catalogue is read only to build vocabularies; products are looked up through counted searches. Candidate searches use a large `k` because cost is per call, not per result.
+10. **Bounded cost.** The state re-reads the words so far after every word, so the work per word grows with the request (about 0.09 ms for real requests of 6 to 25 words) and is capped by `max_live_words` (200: past it the agent only waits, and `finish()` reads the request once); the catalogue is read only to build vocabularies; products are looked up through counted searches. Candidate searches use a large `k` because cost is per call, not per result.
 11. **Clear boundary between backend and UI.** The UI only consumes the agent's trace records through one thin interface; it contains no decision logic.
 
 ---
@@ -111,25 +113,24 @@ agentx1_hack/                      monorepo root (git repo, branch main)
 ## 5. Backend architecture
 
 ```
-word -> slots.read_word -> state.FilterState.update -> policy.plan_search
-                                                          |
-                                           catalog_port.search (counted, large k)
-                                                          |
-                                           policy.decide_commit(candidates, state)
-                                                          |
-                              {wait | commit(product_id)} + trace record
+word -> tokens.make_tokens -> slots.read_words (+ spelling, possessives)
+     -> state.build_snapshot (+ unknown.find_unresolved)   [FilterState.push / finish]
+     -> policy.CommitPolicy.step:  gates -> risk.p_wrong (pre-check) -> catalog_port.find (counted, k=50)
+     -> {wait | commit(product_id)} + trace record
 
-finish(): re-read the full request -> final search -> return product_id
+finish(): re-read the whole request with final=True -> reuse the last search if its filters are
+          unchanged and it matched exactly one product, else search once more (relaxing filters
+          in the baseline's order if nothing matches) -> return product_id
 ```
 
 - **Slots:** category, colour, brand, size, max_price (plus min_price if seen). Each slot holds a value, a confidence, and a revision history.
-- **Revisions:** markers like "oops", "no wait", "sorry I meant", "actually" replace the earlier slot value and start a cooldown before that slot is trusted again.
+- **Revisions:** markers like "oops", "no wait", "sorry I meant", "actually" replace the earlier slot value. While a marker's replacement has not arrived (up to 6 words) the state is unsettled and nothing is committed; a value that was just heard (1 word) or just followed by a pause is held back by the risk rules. There is no per-slot cooldown.
 - **Commit rule (user confirmed):** commit once the remaining candidates cannot be separated by anything the shopper might still add. Candidate rows differ by size, so sized categories normally wait for the size; unsized categories (backpacks, caps, headphones, watches, wallets) can commit earlier.
 - **Hybrid layer (team leader's request, decided 2026-11-26):** the rules read the request and stay the backbone. Learned or statistical parts answer how risky a commit is (`risk.py`, Stage 6) and recover misspellings (`spelling.py`, Stage 7). Everything is trained offline in pure Python and shipped as small JSON, so the runtime stays standard-library only. Possible later additions (after Round 1): a probability over candidate products instead of a single guess, and a soft lexicon from pretrained word vectors. No language model.
 - **Commit rule as expected value (technique A):** committing now is worth it when `P(wrong) x (1.0 + earliness forfeited)` is smaller than the earliness gained by not waiting, which in practice means a risk below about 4 percent when it saves one word and about 12 percent when it saves four (derived from the score formula; the exact budget is tuned in `config.py`).
 - **Key risk (Stages 5 to 8):** corrections, not late constraints. Stage 1 showed a unique match built from correctly read values can only be overturned by a correction (or a misread); late constraints never invalidate it. Measure per-slot correction risk and clause-boundary signals, then set the thresholds in `config.py`.
 - **Confidence:** exact catalogue match high; synonym medium; number-word parse and ambiguous tokens (for example a bare "M") lower, raised by context.
-- **Final check:** `finish()` ignores earlier guesses, reads the whole request, searches once more, and returns that result.
+- **Final check:** `finish()` ignores earlier guesses and reads the whole request. If the filters are the ones of the last search and it matched exactly one product, that search is the check (no extra search); otherwise it searches once more and returns the best match.
 
 ---
 
@@ -215,9 +216,11 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 - Hardening (`tests/test_edge_cases.py`): devanagari, emoji, control characters, zero-width marks, a 20,000-letter word, a 400-digit number, negative and scientific numbers, SQL-looking text, blank words; protocol misuse (finish twice, words after finish, start twice, back-to-back requests, observe before start). Nothing raised. One real weakness found and fixed: the cost of a request grew with the square of its length (2,000 words took 12.9 s). `StateConfig.max_live_words` (200): past it the state stops refreshing per word (the agent can only wait) and `finish()` still reads the whole request once; 2,000 words now take 155 ms and 20,000 words 235 ms, with the final answer unchanged. Real requests are 6 to 25 words and are unaffected.
 - Cleanup: unused imports removed (five files), a scan for unreferenced definitions found none, all scripts re-run.
 - `README.md`: status with the final numbers, layout, run steps and a layered description of the package. Section 4 step 5 above replaced with the user's current PR rule.
-- **Owns:** `backend/scripts/report.py`, `backend/outputs/`, `backend/tests/{test_edge_cases,test_report}.py`, `README.md`; one setting in `config.py` and `state.py`.
-- **Frozen numbers (for the abstract and the note):** dev 43.5 (kit baseline 20.0, accuracy 1.000 vs 0.527, 0 wrong commits, earliness 6.4% of a possible 16.3%, 1.19 searches per request); dev_extra 40.5 (baseline 31.3; accuracy 0.989 vs 0.793; 0 wrong commits); 0.086 ms per word on average (p95 0.40 ms), 1.5 ms CPU per request, cold start 75 ms, 36 MB, about 0.4 CPU-hours per million requests, no model calls, standard library only.
-- **Exit (met):** full test suite green (338 tests); results file produced; numbers frozen.
+- **Owns:** `backend/scripts/report.py`, `backend/outputs/`, `backend/tests/{test_edge_cases,test_report}.py`, `docs/assumptions-and-data.md`, `README.md`; one setting in `config.py` and `state.py`; the two review fixes in `lexicon.py`, `slots.py`, `tokens.py`, `state.py`.
+- **Frozen numbers (for the abstract and the note):** dev 43.5 (kit baseline 20.0, accuracy 1.000 vs 0.527, 0 wrong commits, earliness 6.4% of a possible 16.3%, 1.19 searches per request); dev_extra 40.5 (baseline 31.3; accuracy 0.989 vs 0.793; 0 wrong commits); 0.088 ms per word on average (p95 0.40 ms), 1.55 ms CPU per request, cold start 73 ms, 36 MB, about 0.4 CPU-hours per million requests, no model calls, standard library only.
+- **Review before merge (user request: is the backend really solid?):** full details and numbers in `docs/assumptions-and-data.md`. Clean-room clone of the branch (tests from both directories, all agents, another working directory, outputs reproduce byte for byte); an independent re-implementation of the scorer matches every logged score; run-time audit (no dev file read, every search through the counted tool); causality test (4,440 prefixes, 0 lookahead); metamorphic tests (case, politeness words, openers: 0 changes); 20,000 synthetic requests (accuracy 0.9993, 0.25% wrong early commits, deterministic); 20,000 random-word fuzz requests (no violations); a 44-request blind set (accuracy 0.977, 0 wrong commits, baseline 0.750, taken before fixing what it found); probes of plausible phrasing outside the design.
+- **Found and fixed in review:** "price cap 2000" read "cap" as a category (multi-word price cues now claim it); sizes glued to their cue ("size9", "UK10", "sz10", "w32") are split into two tokens. Documentation corrected where it overstated: no interface for the slot reader, an outdated architecture diagram, a per-slot cooldown that does not exist, "O(1) per word" (it is a bounded re-read), the `finish()` search description, and the "never a wrong commit" wording (0 on dev, 0.25% on synthetic).
+- **Exit (met):** full test suite green (344 tests); results file produced; numbers frozen; assumptions and data sources documented.
 
 ### Stage 10 - Stream interface - `stage-10/stream-interface` - todo
 - A thin backend interface that replays or live-feeds a request and streams the trace records; the contract is written down so backend and UI can be built independently. Transport (for example standard-library HTTP with server-sent events) is decided here.
@@ -259,7 +262,7 @@ Status: `todo`, `doing`, `done`. Each stage = one branch = one PR. "Owns" lists 
 5. What is next: voice demo and finals plans.
 
 ### Abstract outline (500 words or fewer)
-Impact (earlier, safer shopping assistance) / Build summary (layered rules engine, commit policy, verification, UI) / Innovation (separability-based commit rule, confidence and revision handling, trace) / Cost estimate and scale (no model calls, O(1) per word, in-memory vocabulary, searches counted) / Results.
+Impact (earlier, safer shopping assistance) / Build summary (layered rules engine, commit policy, verification, UI) / Innovation (separability-based commit rule, confidence and revision handling, trace) / Cost estimate and scale (no language model calls, about 0.09 ms per word and 1.5 ms of CPU per request on one core, a bounded re-read of the words so far, in-memory vocabulary, searches counted) / Results.
 
 ### Final checklist
 - [ ] Abstract (500 words or fewer)
@@ -290,5 +293,5 @@ Impact (earlier, safer shopping assistance) / Build summary (layered rules engin
 
 ## 9. Open decisions
 
-- Merge style for PRs: squash and merge is proposed (linear `main`); confirm at the first PR.
+- Merge style for PRs: squash and merge (decided; linear `main`).
 - UI specs, framework and how it talks to the backend - discussed at Stage 10 and Stage 11.

@@ -2,7 +2,7 @@
 
 Entry for **AgentX: The Agentic Commerce Challenge** (Techfest 2026-27, IIT Bombay, by Rezolve.ai), Problem Statement 1.
 
-A shopping request arrives one word at a time, for example "black running shoes, size nine, under two thousand...". The agent predicts the shopper's filters (category, colour, size, budget, brand) from the words so far, searches early, and commits to a product as soon as it is safe to, without ever committing to a wrong one. Text only. No language model is used.
+A shopping request arrives one word at a time, for example "black running shoes, size nine, under two thousand...". The agent predicts the shopper's filters (category, colour, size, budget, brand) from the words so far, searches early, and commits to a product as soon as it is safe to, aiming never to commit to a wrong one (none on the public dev set; about 0.25% of 20,000 synthetic requests). Text only. No large language model is used; the only learned part is a 22-weight logistic regression for the commit risk.
 
 ## Status
 
@@ -65,6 +65,8 @@ The agent code lives in the package `backend/anticipatory/` (standard library on
 - **Deciding:** `risk.py` (how likely a commit is to be wrong: hand-coded rules and a learned logistic regression, combined), `policy.py` (when to search and when to commit, from the break-even of the score formula), `catalog_port.py` (the only door to the catalogue), `trace.py` (one record per word), `agent.py` (the orchestrator).
 
 Check the reader against dev with `python scripts/slot_accuracy.py` and `python scripts/state_replay.py` (from `backend/`).
+
+For the data sources, every assumption, what dev influenced, and the verification behind these numbers, read [`docs/assumptions-and-data.md`](docs/assumptions-and-data.md).
 
 ## Known limits
 
