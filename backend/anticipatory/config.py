@@ -16,12 +16,7 @@ class VocabConfig:
     confidence_exact: float = 0.95      # a word taken straight from the catalogue
     confidence_variant: float = 0.90    # plural, hyphen or spacing variant of such a word
     confidence_synonym: float = 0.85    # a synonym we listed ("slides" for sandals)
-    confidence_fuzzy: float = 0.60      # a one-letter misspelling of a brand
-
-    # Misspelling tolerance. Only brand names are matched fuzzily: they are long, distinctive
-    # words, while fuzzy colours or categories would turn "than" into "tan".
-    fuzzy_enabled: bool = True
-    fuzzy_min_length: int = 5
+    confidence_fuzzy: float = 0.60      # a word that had to be spell-corrected (Stage 7)
 
     # A number below this is not a price; above the maximum it is not a price either.
     min_price: int = 100
@@ -110,6 +105,9 @@ class RiskConfig:
     # every correction after a pause follows a value that ended with one.
     clause_end_penalty: float = 0.5
     unsettled_risk: float = 1.0       # a correction is pending or a number is still growing
+    # In the hybrid, a state resting on a value read below this confidence (a spell-corrected
+    # word, an unmarked revision) stays under the rules' caution instead of going to the model.
+    rules_confidence_floor: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -123,6 +121,30 @@ class LearnedRiskConfig:
 
 
 @dataclass(frozen=True)
+class SpellingConfig:
+    """Noisy-channel spelling correction (Stage 7)."""
+
+    enabled: bool = True
+    min_length: int = 4               # three letters or fewer are never corrected ("tan", "red")
+    same_first_letter: bool = True    # people rarely mistype the first letter
+
+    # Edit costs: the channel model. Cheap edits are the common slips.
+    cost_neighbour_key: float = 0.5   # pressed the key next to the right one
+    cost_transposition: float = 0.6   # two letters swapped
+    cost_doubled: float = 0.6         # a doubled letter typed once or three times
+    cost_indel: float = 1.0           # any other letter added or left out
+    cost_substitution: float = 1.0    # any other letter changed
+
+    # The most an edit may cost, by word length: short words are the easiest to confuse.
+    max_cost_short: float = 0.7       # four letters: only the cheapest single slip
+    max_cost_medium: float = 1.0      # five or six letters: one ordinary slip
+    max_cost_long: float = 1.7        # seven or more: one ordinary slip plus a cheap one
+
+    channel_weight: float = 2.0       # how strongly the channel outweighs the word prior
+    min_margin: float = 0.5           # the best candidate must beat the runner-up by this
+
+
+@dataclass(frozen=True)
 class Config:
     vocab: VocabConfig = field(default_factory=VocabConfig)
     slots: SlotConfig = field(default_factory=SlotConfig)
@@ -130,6 +152,7 @@ class Config:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     learned: LearnedRiskConfig = field(default_factory=LearnedRiskConfig)
+    spelling: SpellingConfig = field(default_factory=SpellingConfig)
 
 
 DEFAULT_CONFIG = Config()

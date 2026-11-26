@@ -177,34 +177,6 @@ class SizeFactsTest(unittest.TestCase):
         self.assertEqual(self.lex.sizes_for_category("caps"), frozenset())
 
 
-class FuzzyTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.lex = Lexicon(load_rows())
-
-    def fuzzy(self, word):
-        return self.lex.lookup_fuzzy(tokenize_text(word)[0])
-
-    def test_one_typo_in_a_brand_is_recovered(self):
-        for typo, brand in {"pacvo": "Pacevo", "tikra": "Tikkra", "northwft": "Northweft",
-                            "zentaril": "Zentrail", "strdo": "Strydo",
-                            "kudovaa": "Kudova"}.items():
-            with self.subTest(typo=typo):
-                m = self.fuzzy(typo)
-                self.assertEqual((m.slot, m.value, m.kind), ("brand", brand, "fuzzy"))
-                self.assertEqual(m.confidence, self.lex.config.confidence_fuzzy)
-
-    def test_known_short_or_unrelated_words_are_not_fuzzed(self):
-        for word in ("pacevo", "than", "tan", "wallet", "tanned", "hoodie", "9", "looking",
-                     "budget", "shirts", "stridyo"):          # stridyo is two edits from Strydo
-            with self.subTest(word=word):
-                self.assertIsNone(self.fuzzy(word))
-
-    def test_can_be_switched_off(self):
-        lex = Lexicon(load_rows(), VocabConfig(fuzzy_enabled=False))
-        self.assertIsNone(lex.lookup_fuzzy(tokenize_text("pacvo")[0]))
-
-
 class SmallCatalogueTest(unittest.TestCase):
     """The lexicon depends only on the rows it is given, not on the real catalogue."""
 
