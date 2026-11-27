@@ -58,6 +58,20 @@ docs/              abstract, architecture note, assumptions and data, stream con
 
 ## Run it
 
+Quickest start (macOS, Linux, or Git Bash / WSL on Windows; Python 3.11 or newer and curl): one command sets up the backend on the first run (`backend/.venv`), starts the API and the page, connects them and opens your browser. Ctrl-C stops both. On macOS you can double-click `start.command` instead.
+
+```
+./run.sh                            # page on http://127.0.0.1:5173/, API on http://127.0.0.1:8765
+BACKEND_PORT=9000 FRONTEND_PORT=3000 ./run.sh     # other ports; NO_BROWSER=1 to skip the browser
+```
+
+Or run each part on its own:
+
+```
+./backend/setup.sh                  # API and page together on :8765 (--api-only, --setup-only, --port N)
+./frontend/run.sh                   # page only on :5173, using the API on :8765 (--port N, --api URL)
+```
+
 Requires Python 3.14. The agent needs nothing installed. Run everything from `backend/`.
 
 ```
