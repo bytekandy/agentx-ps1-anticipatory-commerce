@@ -68,6 +68,11 @@ class StateConfig:
     # mention as a late constraint.
     late_window: int = 3
 
+    # A connector ("in", "and", "but") announces another value. Until a value follows, a pause
+    # closes the clause, or this many words pass, the state is not settled ("...XXL, and I'd
+    # rather it be beige": the agent must not commit on "and" or "I'd").
+    connector_window: int = 2
+
     # Reading the whole request again after every word is cheap for real requests (6 to 25
     # words) but grows with the square of the length. Past this many words the state stops
     # updating per word: the agent cannot commit any more (it just waits), and `finish()` still

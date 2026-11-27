@@ -213,6 +213,21 @@ class CuePendingTest(StateTestCase):
 
     def test_plain_words_are_not_pending(self):
         self.assertFalse(self.pending("black cap please"))
+
+
+class ConnectorPendingTest(CuePendingTest):
+    def test_a_connector_announces_a_value(self):
+        for text in ("grey Pacevo sneakers size 8 in", "Loomsy shirt XXL, and",
+                     "Loomsy shirt XXL, and I'd", "the same but", "white cap aur"):
+            with self.subTest(text=text):
+                self.assertTrue(self.pending(text))
+                self.assertFalse(self.snap(text, final=False).settled)
+
+    def test_the_value_or_a_pause_or_two_words_close_it(self):
+        for text in ("Loomsy shirt in white", "Loomsy shirt XXL, and, hmm",
+                     "Loomsy shirt XXL, and thanks a lot", "black cap and."):
+            with self.subTest(text=text):
+                self.assertFalse(self.pending(text))
         self.assertFalse(self.pending(""))
 
 
