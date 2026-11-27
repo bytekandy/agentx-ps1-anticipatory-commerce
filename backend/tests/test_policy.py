@@ -121,6 +121,14 @@ class GateTest(PolicyTestCase):
         self.assertIn("unsettled", self.reason("black sneakers size 9 oops"))
         self.assertIn("unsettled", self.reason("black sneakers size 9 under two thousand"))
 
+    def test_a_guessed_value_blocks(self):
+        # a number with no cue beside it, and a spell-corrected brand
+        self.assertIn("guessed", self.reason("black Pacevo sneakers size 9 but grey 8 please"))
+        self.assertIn("guessed", self.reason("black Pacvo sneakers size 9 please"))
+
+    def test_a_restated_number_is_no_guess(self):
+        self.assertIsNone(self.reason("black sneakers size eight, actually nine, please"))
+
 
 class StepTest(PolicyTestCase):
     """Small catalogues, so uniqueness is easy to reason about."""

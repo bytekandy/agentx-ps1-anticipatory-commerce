@@ -89,6 +89,9 @@ class Snapshot:
     cue_pending: bool = False               # the words end on a cue awaiting its number, or on "make"
     unresolved: Tuple[Unresolved, ...] = () # constraints stated that nothing in the shop answers to
     unsettled_factor: float = 0.5
+    # Values the reader had to guess: a number with no cue beside it ("in 8", "so 34") or a
+    # spell-corrected word. They may serve the final answer, but never an early commit.
+    guessed: Tuple[str, ...] = ()
 
     @property
     def settled(self) -> bool:
@@ -153,11 +156,15 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
     events: Dict[str, List[_Event]] = {}
     pending: List[str] = []
     heard: List[SlotMention] = []                       # mentions that count (not weak guesses)
+    guessed: List[str] = []
     for m in mentions:
         marked = _marker_before(markers, m.start, cfg.correction_window)
         confidence = m.confidence
-        if m.via == "bare" and marked and m.slot in events:
+        restated = m.via == "bare" and marked and m.slot in events
+        if restated:
             confidence = max(confidence, cfg.restate_confidence)       # a restatement
+        elif (m.slot == "size" and m.via == "bare") or m.kind == "fuzzy":
+            guessed.append(f"{m.slot}: {m.value}")
         if confidence < cfg.min_belief_confidence:
             continue                                                   # a weak guess
         heard.append(m)
@@ -205,6 +212,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
         unsettled_factor=cfg.unsettled_factor,
+        guessed=tuple(guessed),
     )
 
 

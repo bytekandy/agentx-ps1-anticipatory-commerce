@@ -6,7 +6,8 @@ stand-in for tests. Part 2 is the commit policy.
 The agent is rewarded for committing early and punished hard for committing wrongly, so the
 default action is always "wait". A commit needs all of these:
 
-  1. the state is settled (no correction on its way, no number still growing);
+  1. the state is settled (no correction on its way, no number still growing), and no value
+     in it was guessed (a number with no cue, a spell-corrected word);
   2. the category is known, and for categories with sizes the size is known too, because until
      then no single product can match (a vocabulary-level fact, not a catalogue peek);
   3. the risk model says the chance of being wrong is below the break-even risk;
@@ -114,6 +115,10 @@ def blocked_reason(snapshot: Snapshot, filters: Dict[str, Any], lexicon: Lexicon
         return f"not understood, so no early commit: {words}"
     if not snapshot.settled:
         return "unsettled: correction pending, number still growing or a cue awaiting its number"
+    if snapshot.guessed:
+        # A hard rule, not left to the risk model: in a calm state the learned model barely
+        # weighs confidence, so a weak guess could otherwise slip under the break-even risk.
+        return f"guessed, so no early commit: {', '.join(snapshot.guessed)}"
     category = filters.get("category")
     if category is None:
         return "category not known"
