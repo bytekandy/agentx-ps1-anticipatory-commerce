@@ -7,8 +7,8 @@ A shopper who speaks or types a request word by word still waits for the last wo
 A deterministic agent with no language model calls. It reads each word, keeps a belief for category, colour, size, brand and price, tracks corrections and numbers still being spoken, and searches only when a commit is worth its cost. A 22-weight statistical model, trained on synthetic requests, estimates the chance that a commit is wrong; a rules layer takes over while the request is still changing. It commits only when exactly one product matches and that chance is below the break-even point derived from the scoring formula (3.9 percent).
 
 ## Results (public dev set, scored by the organisers' evaluate.py)
-- Score 43.5 against 20.0 for the kit baseline; right final answer on all 300 requests (baseline 0.527); zero wrong early commits.
-- 87 requests we wrote with new phrasing: 40.5 against 31.3, no wrong early commit.
+- Score 43.6 against 20.0 for the kit baseline; right final answer on all 300 requests (baseline 0.527); zero wrong early commits.
+- 87 requests we wrote with new phrasing: 40.0 against 31.3, no wrong early commit. Two outside-author sets, since used for development: 48.1 and 40.4.
 - 20,000 synthetic requests: about 0.25 percent end in a wrong early commit.
 Dev scores are optimistic: some vocabulary and tuning came from reading dev. The earliness gain is modest by design (6.4 percent of the request out of 16.3 possible): every faster setting we tried added wrong commits.
 

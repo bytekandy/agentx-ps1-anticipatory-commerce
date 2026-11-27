@@ -85,8 +85,10 @@ evidence is the blind set and the synthetic runs below.
 ## 4. The evidence and its limits
 | Test set | Size | Accuracy | Wrong early commits | Score | Kit baseline | Tuned on it? |
 |---|---|---|---|---|---|---|
-| dev | 300 | 1.000 | 0 | 43.5 | 20.0 (0.527) | Partly (section 3) |
-| dev_extra | 87 | 0.989 | 0 | 40.5 | 31.3 (0.793) | Bugs fixed on it |
+| dev | 300 | 1.000 | 0 | 43.6 | 20.0 (0.527) | Partly (section 3) |
+| dev_extra | 87 | 0.989 | 0 | 40.0 | 31.3 (0.793) | Bugs fixed on it |
+| dev_blind | 200 | 0.990 | 0 | 48.1 | 28.5 (0.720) | Failures studied, rules generalised from them |
+| dev_brutal | 97 | 1.000 | 0 | 40.4 | 24.3 (0.619) | Failures studied, rules generalised from them |
 | Blind set, before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** |
 | Blind set after fixing the one bug it found ("price cap") | 44 | 1.000 | 0 | 43.8 | | Now yes |
 | Synthetic, 4 seeds, typo rates 0 / 0 / 5% / 15% | 20,000 | 0.9993 | 50 requests (**0.25%**) | n/a | | Model trained on the same world |
@@ -101,7 +103,7 @@ early is 40.0, and the cut-off is 60% of the baseline, 12.0.
 ## 5. Verification
 ### Final test (Stage 19), on a fresh clone of `main`
 - **Tests:** 467 pass with the server extras installed; 395 pass and 6 skip without them (the agent's own tests need only Python).
-- **Scores (official `evaluate.py`):** `agent.py` 43.5 on dev, 0 wrong commits; `agent_heuristic.py` 41.6; `agent_learned.py` 43.6 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.5, 0 wrong commits; kit baseline 20.0 and 31.3.
+- **Scores (official `evaluate.py`):** `agent.py` 43.6 on dev, 0 wrong commits; `agent_heuristic.py` 41.7; `agent_learned.py` 43.7 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.0, 0 wrong commits; kit baseline 20.0 and 31.3.
 - **Reproducible:** `scripts/report.py` regenerates `results.jsonl` and `results_dev_extra.jsonl` byte for byte.
 - **Kit files untouched:** `catalogue.csv`, `dev.jsonl`, `evaluate.py`, `search.py` and `README.md` in `backend/` are identical to the first commit.
 - **Determinism and causality:** 80 random requests run twice give identical outputs, and every proper prefix (939) replayed in a fresh run matches the full run exactly: no lookahead.
@@ -155,7 +157,7 @@ be taught words by use. This needs no external data.
 
 - **Separate, optional file:** `backend/anticipatory/data/learned_lexicon.json` (git-ignored). The
   agent only reads it, at start. **When the file is absent, a word the lexicon cannot place is
-  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.5 is measured
+  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.6 is measured
   without it).
 - **Evidence:** (1) a correction in a request ("clogs, I mean sandals" teaches clogs = sandals);
   (2) an accepted product (the "This is what I wanted" button, `POST /api/feedback`): if exactly one
@@ -180,4 +182,4 @@ be taught words by use. This needs no external data.
 - **Searching before the size is known is wasted.** Mean candidates as slots are added (category, colour, brand, size, price): 80, 17, 7.9, 1.5, 1.0. The agent therefore searches only when the size is known or the category has none.
 - **Number words are ambiguous word by word.** "eight" may be size 8 or the start of "eight hundred"; price phrases run up to four words, so a number word is never acted on until it is settled.
 - **The vocabulary is small but the hidden set has unseen wording:** 300 requests use only 283 distinct tokens, which is why plurals, spelling variants, number words and Hindi forms are generalised in the lexicon rather than copied from dev.
-- **Reference agents (kit scorer):** no early commit with perfect reading 40.0; commit at the first unique product 32.7 (22 wrong commits); marker-aware with a one-word hold 39.6 (8 wrong commits). Our hybrid reaches 43.5 with none.
+- **Reference agents (kit scorer):** no early commit with perfect reading 40.0; commit at the first unique product 32.7 (22 wrong commits); marker-aware with a one-word hold 39.6 (8 wrong commits). Our hybrid reaches 43.6 with none.
