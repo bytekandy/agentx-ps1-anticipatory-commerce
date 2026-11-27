@@ -39,13 +39,13 @@ Measured on the dev set, on the machine that generated this file (timings vary a
 |  |  |
 |---|---|
 | language model calls per request | 0 (rules, a 22-weight logistic regression, a word list) |
-| per-word latency, mean / median / p95 / p99 / max | 0.098 / 0.072 / 0.384 / 0.520 / 9.229 ms |
-| CPU per request (the whole request, including searches) | 1.75 ms |
-| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 87 ms |
-| memory (process peak, with all agents and data loaded) | 42352 MB |
+| per-word latency, mean / median / p95 / p99 / max | 0.097 / 0.073 / 0.345 / 0.511 / 9.207 ms |
+| CPU per request (the whole request, including searches) | 1.74 ms |
+| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 83 ms |
+| memory (process peak, with all agents and data loaded) | 43008 MB |
 | searches per request | 1.10 |
 | extrapolated: one million requests on one core | 0.5 CPU-hours, no per-request API cost |
-| size on disk: code / word list / risk model | 121 KB / 912 KB / 0.8 KB |
+| size on disk: code / word list / risk model | 122 KB / 912 KB / 0.8 KB |
 | dependencies | Python 3.14, standard library only |
 
 ## dev_extra
