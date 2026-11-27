@@ -96,8 +96,10 @@ class SearchFilterTest(PolicyTestCase):
                                                 "max_price": 2000})
 
     def test_leaves_out_weak_beliefs(self):
-        snap = self.snapshot("black sneakers 9")           # a bare number is only a guess
+        snap = self.snapshot("black cap 9")         # a bare number no cap size answers to
         self.assertNotIn("size", search_filters(snap))
+        snap = self.snapshot("black sneakers size 9 10")   # a stray number after a stated size
+        self.assertEqual(search_filters(snap)["size"], "9")
 
 
 class GateTest(PolicyTestCase):

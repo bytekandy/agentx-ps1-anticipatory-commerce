@@ -60,6 +60,11 @@ class StateConfig:
     # actually six"), is read as a restatement and trusted this much.
     restate_confidence: float = 0.85
 
+    # A number with no cue that is a real size of the request's category ("give me 10 in the
+    # white sneakers", "so 34, blue jeans"): above the belief floor, so the final answer uses it,
+    # while `Snapshot.guessed` keeps it from ever making an early commit.
+    bare_size_fit_confidence: float = 0.65
+
     # A new value for a slot that already had one, with no marker to explain it, still wins
     # (the last word is usually right) but is trusted less.
     unmarked_revision_confidence: float = 0.60

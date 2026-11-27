@@ -41,6 +41,8 @@ MARKER_PHRASES = frozenset({("make", "that"), ("make", "it")})
 MARKER_STARTERS = frozenset({"make"})
 # A connector said last announces another value ("...grey in", "...XXL, and", "same but"):
 # wait one word to see it. A connector that ends a clause ("in." "and,") announces nothing.
+# Words that set a new value against an earlier one ("the same but grey in 8", "so 34").
+CONTRAST_WORDS = frozenset({"but", "so", "instead", "same", "rather", "now", "lekin", "par"})
 CONNECTORS = frozenset({"in", "and", "also", "but", "plus", "or", "with", "of", "aur", "mein",
                         "same"})
 
@@ -157,6 +159,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
     pending: List[str] = []
     heard: List[SlotMention] = []                       # mentions that count (not weak guesses)
     guessed: List[str] = []
+    said_category = _said_category(mentions, cfg)
     for m in mentions:
         marked = _marker_before(markers, m.start, cfg.correction_window)
         confidence = m.confidence
@@ -165,6 +168,10 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
             confidence = max(confidence, cfg.restate_confidence)       # a restatement
         elif (m.slot == "size" and m.via == "bare") or m.kind == "fuzzy":
             guessed.append(f"{m.slot}: {m.value}")
+            if m.slot == "size" and said_category and lexicon.category_has_sizes(said_category) \
+                    and size_fits_category(str(m.value), said_category, lexicon) \
+                    and _may_replace(tokens, events.get("size", ()), m):
+                confidence = max(confidence, cfg.bare_size_fit_confidence)
         if confidence < cfg.min_belief_confidence:
             continue                                                   # a weak guess
         heard.append(m)
@@ -231,6 +238,26 @@ def _marker_before(markers: Sequence[Marker], start: int, window: int) -> Option
         if marker.end <= start and start - marker.end <= window:
             best = marker
     return best
+
+
+def _said_category(mentions: Sequence[SlotMention], cfg) -> Optional[str]:
+    """The category the words name, last one winning, wherever it comes in the request: a
+    number heard before it ("I wear a 9 ... sneakers") is judged against it."""
+    said = [m.value for m in mentions if m.slot == "category" and m.complete
+            and m.confidence >= cfg.min_belief_confidence]
+    return said[-1] if said else None
+
+
+def _may_replace(tokens: Sequence[Token], earlier: Sequence["_Event"], m: SlotMention) -> bool:
+    """May a cue-less number replace the size already heard? Only after a contrast word
+    ("in size 9, I want the same but grey in 8", "a 9 but ... so 10"). Without one, a stray
+    number ("size eight slides 6") must not overturn a size that was clearly stated."""
+    if not earlier:
+        return True
+    last = earlier[-1].mention
+    if last.via == "bare":
+        return True                                     # two guesses: the later one wins
+    return any(t.text in CONTRAST_WORDS for t in tokens[last.end:m.start])
 
 
 def _late_before(tokens: Sequence[Token], start: int, window: int) -> bool:
