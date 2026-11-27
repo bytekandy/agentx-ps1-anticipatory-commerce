@@ -108,9 +108,19 @@ class AnticipatoryAgent:
         k = self.config.policy.final_k
         # Every value the shopper stated fits the target, so when nothing matches, something was
         # misread: most likely the value read least surely. Drop the weakest first; between equal
-        # confidences keep the kit's order.
-        order = sorted((slot for slot in filters),
-                       key=lambda s: (snapshot.slots[s].confidence, _RELAX_ORDER.index(s)))
+        # confidences keep the kit's order. A category read straight from a word goes last: it is
+        # what the shopper came for, and its confidence then only says how it was spelt ("hoodie"
+        # is a variant of "hoodies" at 0.90). Dropping it first answered a dress to a request for
+        # a hoodie. A doubtful category (an unmarked revision, a spelling guess: below the synonym
+        # confidence) is real doubt and keeps its place by confidence.
+        firm = self.config.vocab.confidence_synonym
+
+        def drop_key(slot):
+            belief = snapshot.slots[slot]
+            return (slot == "category" and belief.confidence >= firm, belief.confidence,
+                    _RELAX_ORDER.index(slot))
+
+        order = sorted(filters, key=drop_key)
         while True:
             hits = allowed(self.catalog.find(filters, query, k), snapshot.excluded)
             if hits:
