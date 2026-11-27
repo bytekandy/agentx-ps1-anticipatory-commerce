@@ -25,7 +25,7 @@ Safety rules
 import csv
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
@@ -316,9 +316,14 @@ class Lexicon:
         weights = dict(self.word_weights)
         for w in cue_words:
             weights.setdefault(w, CUE_WORD_WEIGHT)
+        spelling = spelling or DEFAULT_CONFIG.spelling
         self.corrector = SpellingCorrector(
-            weights, self.catalogue_words - frozenset(weights),
-            spelling or DEFAULT_CONFIG.spelling)
+            weights, self.catalogue_words - frozenset(weights), spelling)
+        # Brand mode (see SpellingConfig): brand names only, no real-word guard, one more edit.
+        self.brand_corrector = SpellingCorrector(
+            {w: 1.0 for b in self.brands for w in b.lower().split()}, (),
+            replace(spelling, real_word_ratio=0.0,
+                    max_cost_long=spelling.max_cost_long + spelling.brand_extra_cost))
         self._max_phrase_len = max(len(key) for key in self._table)
         self._confidence = {
             "exact": self.config.confidence_exact,
