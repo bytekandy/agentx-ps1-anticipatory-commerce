@@ -105,11 +105,16 @@ class AnticipatoryAgent:
 
         query = " ".join(self.words)
         k = self.config.policy.final_k
+        # Every value the shopper stated fits the target, so when nothing matches, something was
+        # misread: most likely the value read least surely. Drop the weakest first; between equal
+        # confidences keep the kit's order.
+        order = sorted((slot for slot in filters),
+                       key=lambda s: (snapshot.slots[s].confidence, _RELAX_ORDER.index(s)))
         while True:
             hits = self.catalog.find(filters, query, k)
             if hits:
                 return hits[0]["product_id"]
-            droppable = next((slot for slot in _RELAX_ORDER if slot in filters), None)
-            if droppable is None:
+            if not order:
                 return None
+            droppable = order.pop(0)
             filters = {slot: v for slot, v in filters.items() if slot != droppable}
