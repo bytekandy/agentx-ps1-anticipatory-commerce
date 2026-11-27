@@ -113,6 +113,18 @@ class AgentFlowTest(AgentTestCase):
             agent.observe(word)
         self.assertEqual(agent.finish(), "P3")
 
+    def test_a_ruled_out_value_is_never_the_answer(self):
+        catalog = InMemoryCatalog([
+            {"product_id": "P1", "title": "Pacevo Court Sneakers, Black", "brand": "Pacevo",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "1500", "description": ""},
+            {"product_id": "P3", "title": "Kudova Flex Sneakers, Black", "brand": "Kudova",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "1800", "description": ""}])
+        agent = AnticipatoryAgent(catalog, lexicon=self.lex)
+        agent.start("t")
+        for word in "black sneakers size 9, anything but Pacevo".split():
+            agent.observe(word)
+        self.assertEqual(agent.finish(), "P3")      # the cheaper Pacevo comes first otherwise
+
     def test_empty_request(self):
         agent = AnticipatoryAgent(InMemoryCatalog(self.rows), lexicon=self.lex)
         agent.start("t")
