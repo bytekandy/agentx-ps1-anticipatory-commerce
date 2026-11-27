@@ -413,6 +413,42 @@ class BareNumberTest(StateTestCase):
         self.assertEqual(self.snap("small white Loomsy t-shirt").filters["size"], "S")
 
 
+class CancelAndNegationTest(StateTestCase):
+    def test_doesnt_matter_and_any_clear_the_slot(self):
+        for text, slot in (("grey Loomsy hoodie size M, colour doesnt really matter, under 1000", "colour"),
+                           ("Sonquil white headphones, actually brand doesn't matter", "brand"),
+                           ("Tanaro kurta in green, size M, any brand honestly", "brand")):
+            with self.subTest(text=text):
+                self.assertIsNone(self.snap(text).filters[slot])
+
+    def test_a_value_after_the_cancel_still_counts(self):
+        s = self.snap("colour doesn't matter, but black sneakers size 9")
+        self.assertEqual(s.filters["colour"], "black")
+
+    def test_a_later_slot_word_waits_for_what_follows(self):
+        self.assertTrue(self.snap("grey Loomsy hoodie size M, colour", final=False).cue_pending)
+        for text in ("Loomsy XXL size", "black colour Loomsy shirt",
+                     "Mehrin dress size XL. sorry, I meant M size"):
+            with self.subTest(text=text):
+                self.assertFalse(self.snap(text, final=False).cue_pending)
+
+    def test_a_negated_value_is_excluded_not_asked_for(self):
+        s = self.snap("a navy Tanaro shirt, not a t-shirt, size XL")
+        self.assertEqual(s.filters["category"], "shirts")
+        self.assertEqual(s.excluded, (("category", "t-shirts"),))
+        self.assertEqual(self.snap("sneakers anything but Pacevo").excluded, (("brand", "Pacevo"),))
+
+    def test_corrections_and_price_cues_are_not_negations(self):
+        self.assertEqual(self.snap("black, no, white sneakers size 9").filters["colour"], "white")
+        s = self.snap("black cap not more than 1500")
+        self.assertEqual((s.filters["max_price"], s.excluded), (1500, ()))
+
+    def test_nothing_above_is_a_budget(self):
+        self.assertEqual(self.snap("gold watch, nothing above 2000").filters["max_price"], 2000)
+        self.assertEqual(self.snap("gold watch above 2000").slots["min_price"].value, 2000)
+        self.assertFalse(self.snap("white headphones nothing", final=False).cue_pending)
+
+
 class CueTypoTest(unittest.TestCase):
     def test_typos_in_size_and_price_cues_are_read(self):
         for plain, typo in (("black shoes size 9", "black shoes sise 9"),

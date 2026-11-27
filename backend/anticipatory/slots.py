@@ -41,6 +41,10 @@ _MIN_PRICE_CUES = frozenset({
     ("more", "than"), ("starting", "at"), ("starting", "from"),
 })
 
+# A lower-bound cue after one of these is an upper bound: "nothing above 2000", "not over 1500".
+# (Kept out of the cue tables, or "nothing" alone would announce a number: "nothing too flashy".)
+_NEGATED_MIN = frozenset({"nothing", "not", "never"})
+
 # Cues that follow the number: "1500 tak", "1500 or less". The cues that precede a number
 # ("under", "budget") are deliberately absent, or "size 9 under 1500" would make 9 a price.
 # A number followed by one of these counts something else: "my 8 year old", "2 pairs", "10th".
@@ -330,6 +334,10 @@ def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
         if j + 1 >= n and tuple(t.text for t in tokens[j + 1 - n:j + 1]) == cue \
                 and (best is None or n > len(best[0])):
             best = (cue, slot)
+    if best and best[1] == "min_price":
+        before = j - len(best[0])
+        if before >= 0 and tokens[before].text in _NEGATED_MIN and not tokens[before].clause_end:
+            return "price", "max_price"             # "nothing above 2000" is a budget
     return ("price", best[1]) if best else None
 
 
