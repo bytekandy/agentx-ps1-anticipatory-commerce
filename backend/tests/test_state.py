@@ -449,6 +449,21 @@ class CancelAndNegationTest(StateTestCase):
         self.assertFalse(self.snap("white headphones nothing", final=False).cue_pending)
 
 
+class MaterialWordTest(StateTestCase):
+    def test_denim_is_jeans_only_when_no_other_category_is_said(self):
+        for text, category in (("navy Northweft shirt medium, under 1200, denim is fine", "shirts"),
+                               ("a denim jacket, size L", "jackets"),
+                               ("denim shirt from Northweft size M", "shirts"),
+                               ("do you have denim in black, size 32", "jeans")):
+            with self.subTest(text=text):
+                self.assertEqual(self.snap(text).filters["category"], category)
+
+    def test_denim_alone_is_a_guess_but_denims_is_plain_jeans(self):
+        self.assertIn("category: jeans", self.snap("black denim size 32").guessed)
+        s = self.snap("navy blue Northweft denims size 28")
+        self.assertEqual((s.filters["category"], s.guessed), ("jeans", ()))
+
+
 class CueTypoTest(unittest.TestCase):
     def test_typos_in_size_and_price_cues_are_read(self):
         for plain, typo in (("black shoes size 9", "black shoes sise 9"),

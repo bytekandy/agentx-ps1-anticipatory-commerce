@@ -87,7 +87,7 @@ evidence is the blind set and the synthetic runs below.
 |---|---|---|---|---|---|---|
 | dev | 300 | 1.000 | 0 | 43.6 | 20.0 (0.527) | Partly (section 3) |
 | dev_extra | 87 | 0.989 | 0 | 40.0 | 31.3 (0.793) | Bugs fixed on it |
-| dev_blind | 200 | 0.990 | 0 | 48.1 | 28.5 (0.720) | Failures studied, rules generalised from them |
+| dev_blind | 200 | 0.995 | 0 | 48.3 | 28.5 (0.720) | Failures studied, rules generalised from them |
 | dev_brutal | 97 | 1.000 | 0 | 40.4 | 24.3 (0.619) | Failures studied, rules generalised from them |
 | Blind set, before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** |
 | Blind set after fixing the one bug it found ("price cap") | 44 | 1.000 | 0 | 43.8 | | Now yes |

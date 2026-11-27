@@ -113,6 +113,22 @@ class AgentFlowTest(AgentTestCase):
             agent.observe(word)
         self.assertEqual(agent.finish(), "P3")
 
+    def test_relaxing_never_drops_the_category_first(self):
+        # "hoodie" is a variant of "hoodies" (0.90), the weakest value here. No maroon Loomsy
+        # hoodie comes in XS, so a filter must go: dropping the category answered a dress.
+        _, final, _, agent = self.run_request("Loomsy hoodie, maroon, size XS, hmm, really")
+        self.assertEqual(agent.state.snapshot.slots["category"].confidence, 0.90)
+        product = next(r for r in self.rows if r["product_id"] == final)
+        self.assertEqual(product["category"], "hoodies")
+
+    def test_a_doubtful_category_can_still_be_dropped_first(self):
+        # "tees" is Hindi 30 here, but also reads as t-shirts: an unmarked revision of "jeans" at
+        # 0.6. That is real doubt, so it is dropped before the firmly read values.
+        _, final, _, agent = self.run_request("Tanaro ki grey jeans, size tees, pandrah sau tak")
+        self.assertLess(agent.state.snapshot.slots["category"].confidence, 0.85)
+        product = next(r for r in self.rows if r["product_id"] == final)
+        self.assertEqual(product["category"], "jeans")
+
     def test_a_ruled_out_value_is_never_the_answer(self):
         catalog = InMemoryCatalog([
             {"product_id": "P1", "title": "Pacevo Court Sneakers, Black", "brand": "Pacevo",

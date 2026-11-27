@@ -50,6 +50,10 @@ SLOT_WORDS = {"colour": "colour", "color": "colour", "colours": "colour", "color
 _NOT_WORDS = frozenset({"doesn't", "doesnt", "don't", "dont", "not", "no", "never"})
 _MATTER_WORDS = frozenset({"matter", "matters", "important"})
 SLOT_WORD_WINDOW = 4
+# Material words that may stand for a category. In the catalogue denim is the cloth of jeans,
+# shirts and jackets, so it names jeans only when the request names no other category.
+MATERIAL_CATEGORY_WORDS = frozenset({"denim"})
+
 # Words that exclude the value after them ("not a t-shirt", "except black"). "no" and "nahi"
 # are correction markers ("black, no, white"), so they are left out on purpose.
 NEGATION_WORDS = frozenset({"not", "except", "excluding", "without"})
@@ -185,6 +189,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         else:
             kept.append(m)
     mentions = kept
+    mentions = _material_words(tokens, mentions, guessed)
     said_category = _said_category(mentions, cfg)
     for m in mentions:
         marked = _marker_before(markers, m.start, cfg.correction_window)
@@ -270,6 +275,22 @@ def _marker_before(markers: Sequence[Marker], start: int, window: int) -> Option
         if marker.end <= start and start - marker.end <= window:
             best = marker
     return best
+
+
+def _material_words(tokens: Sequence[Token], mentions: List[SlotMention],
+                    guessed: List[str]) -> List[SlotMention]:
+    """A material word that also stands for a category ("denim" for jeans) names the category
+    only when nothing else in the request does: "denim shirt", "a navy shirt ... denim is fine"
+    are shirts. Even then it is a guess, never an early commit. The plural noun ("denims") is
+    a plain synonym and is not affected."""
+    material = {id(m) for m in mentions if m.slot == "category" and m.end - m.start == 1
+                and tokens[m.start].text in MATERIAL_CATEGORY_WORDS}
+    if not material:
+        return mentions
+    if any(m.slot == "category" and id(m) not in material for m in mentions):
+        return [m for m in mentions if id(m) not in material]      # another category was said
+    guessed += [f"category: {m.value}" for m in mentions if id(m) in material]
+    return mentions
 
 
 def _negated(tokens: Sequence[Token], m: SlotMention) -> bool:
