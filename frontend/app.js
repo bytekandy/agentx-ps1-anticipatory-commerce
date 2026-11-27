@@ -1,7 +1,17 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const SLOTS = [["category", "Category"], ["colour", "Colour"], ["size", "Size"], ["brand", "Brand"], ["max_price", "Budget"]];
-const api = {base: location.protocol === "file:" ? "http://127.0.0.1:8765" : location.origin, ws: null, es: null};
+// The API is where the page came from, unless `?api=` names a server on this machine (the page
+// served by frontend/run.sh on its own port). Only local addresses are accepted, so a link cannot
+// point the page, and a typed API key, at someone else's server.
+const apiBase = () => {
+  try {
+    const u = new URL(new URLSearchParams(location.search).get("api") || "");
+    if (/^https?:$/.test(u.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)) return u.origin;
+  } catch (_) { /* no or bad ?api= */ }
+  return location.protocol === "file:" ? "http://127.0.0.1:8765" : location.origin;
+};
+const api = {base: apiBase(), ws: null, es: null};
 let state = null, sent = "", info = {break_even_risk: 0.0387};
 
 const key = () => $("key").value.trim();
