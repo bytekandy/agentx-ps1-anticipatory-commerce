@@ -134,6 +134,7 @@ HINDI_COLOUR_STEMS = {
 }
 HINDI_ENDINGS = ("a", "i", "e")
 HINDI_FORM_MAX_ENGLISH_RANK = 20_000            # a form this common in English is left out
+_RESPELL_MIN_LENGTH = 4                         # shorter words are too easily another word
 
 # A sport word before a shoe word, in English or Hindi, is a running shoe: "running wale joote",
 # "sports joota", "jogging shoe". The qualifier is required: plain "joote" names no category.
@@ -252,6 +253,20 @@ def _spellings(parts: Sequence[str]) -> Set[Tuple[str, ...]]:
     return keys
 
 
+# Romanised Hindi has no fixed spelling: neela, nila, neelaa, kaala, kaalaa, bhoora, chhota, chota.
+# The key drops what writers vary: long vowels are short, "chh" is "ch", "w" is "v", doubled
+# letters are single. Two spellings of one word share a key.
+_KEY_RULES = (("chh", "ch"), ("aa", "a"), ("ee", "i"), ("ii", "i"), ("oo", "u"), ("uu", "u"),
+              ("w", "v"))
+
+
+def transliteration_key(word: str) -> str:
+    word = word.lower()
+    for old, new in _KEY_RULES:
+        word = word.replace(old, new)
+    return re.sub(r"(.)\1+", r"\1", word)
+
+
 def _generated_phrases() -> List[Tuple[str, str, str]]:
     """(phrase, slot, value) made by rule from the tables above, rather than listed one by one."""
     out: List[Tuple[str, str, str]] = []
@@ -301,6 +316,7 @@ class Lexicon:
         self._table: Dict[Tuple[str, ...], _Entry] = {}
         self._build()
         self._add_learned(learned or {})
+        self._respell: Dict[str, str] = self._build_respell()
         self.known_words: FrozenSet[str] = frozenset(
             {w for key in self._table for w in key}
             | {w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS | LATE_WORDS
@@ -426,6 +442,32 @@ class Lexicon:
                     self._table[key] = _Entry(slot, value, kind)
                 else:
                     self.conflicts.append((key, meanings))
+
+    def _build_respell(self) -> Dict[str, str]:
+        """transliteration key -> the table word it stands for, for single-word synonyms that are
+        not ordinary English ("neela", "kaala", "chappals", "kurti"). Keys shared by words with
+        different meanings are dropped."""
+        english = english_words()
+        by_key: Dict[str, Dict[str, Tuple[str, str]]] = defaultdict(dict)
+        for key, entry in self._table.items():
+            if len(key) != 1 or entry.kind != "synonym" or len(key[0]) < _RESPELL_MIN_LENGTH:
+                continue
+            rank = english.rank(key[0])
+            if rank is None or rank > HINDI_FORM_MAX_ENGLISH_RANK:
+                by_key[transliteration_key(key[0])][key[0]] = (entry.slot, entry.value)
+        return {k: sorted(words)[0] for k, words in by_key.items()
+                if len({meaning for meaning in words.values()}) == 1}
+
+    def respell(self, text: str) -> Optional[str]:
+        """The listed word that `text` is another romanised spelling of ("neelaa" for "neela"),
+        or None. A word the lexicon, the catalogue or ordinary English already knows is left alone."""
+        if len(text) < _RESPELL_MIN_LENGTH or text in self.known_words \
+                or text in self.catalogue_words:
+            return None
+        rank = english_words().rank(text)
+        if rank is not None and rank <= HINDI_FORM_MAX_ENGLISH_RANK:
+            return None
+        return self._respell.get(transliteration_key(text))
 
     # -- queries -----------------------------------------------------------------------------
 

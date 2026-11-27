@@ -320,3 +320,45 @@ class GeneratedPhrasesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransliterationTest(unittest.TestCase):
+    """Another romanised spelling of a listed Hindi word is the same word."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.lex = Lexicon(load_rows())
+
+    def test_key_ignores_what_writers_vary(self):
+        from anticipatory.lexicon import transliteration_key
+        self.assertEqual(transliteration_key("neelaa"), transliteration_key("nila"))
+        self.assertEqual(transliteration_key("kaalaa"), transliteration_key("kala"))
+        self.assertEqual(transliteration_key("bhooraa"), transliteration_key("bhura"))
+        self.assertNotEqual(transliteration_key("neela"), transliteration_key("peela"))
+
+    def test_other_spellings_find_the_listed_word(self):
+        for spelt, listed in (("neelaa", "neela"), ("kaalaa", "kaala"), ("haraa", "hara"),
+                              ("gulaabi", "gulabi"), ("chandee", "chandi"), ("topee", "topi"),
+                              ("chapals", "chappals")):
+            with self.subTest(spelt=spelt):
+                self.assertEqual(self.lex.respell(spelt), listed)
+
+    def test_known_and_english_words_are_left_alone(self):
+        for word in ("neela", "hare", "nile", "pile", "peel", "nikla", "red", "blue", "kal", "bag"):
+            with self.subTest(word=word):
+                self.assertIsNone(self.lex.respell(word))
+
+    def test_no_ordinary_english_word_is_respelt(self):
+        from anticipatory.tokens import english_words
+        changed = [w for w in english_words()._rank if self.lex.respell(w)]
+        self.assertEqual(changed, [])
+
+    def test_colliding_keys_are_dropped(self):
+        # no two listed words of different meaning may share a key
+        from anticipatory.lexicon import transliteration_key
+        seen = {}
+        for key, entry in self.lex._table.items():
+            if len(key) == 1 and entry.kind == "synonym":
+                seen.setdefault(transliteration_key(key[0]), set()).add((entry.slot, entry.value))
+        for key in self.lex._respell:
+            self.assertEqual(len(seen[key]), 1, key)
