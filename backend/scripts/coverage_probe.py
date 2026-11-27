@@ -51,6 +51,44 @@ TERMS = {
 }
 
 
+# A second list, written AFTER the first and BEFORE any semantic model was tried, and used only to
+# judge a choice made on the first list (the similarity threshold): the held-out probe.
+HELD_OUT_TERMS = {
+    ("category", "running shoes"): ["marathon shoes", "jogging footwear", "athletic shoes", "running footwear", "cross trainers"],
+    ("category", "sneakers"): ["tennis shoes", "skate shoes", "everyday sneakers", "low tops", "high tops"],
+    ("category", "sandals"): ["beach sandals", "sliders", "slip ons", "open sandals", "summer sandals", "chappals"],
+    ("category", "t-shirts"): ["graphic tee", "crew neck", "tank top", "tshirt", "cotton tee"],
+    ("category", "shirts"): ["dress shirt", "oxford shirt", "linen shirt", "collared shirt", "flannel"],
+    ("category", "jeans"): ["denim trousers", "slim fit jeans", "straight jeans", "bootcut", "dungarees"],
+    ("category", "dresses"): ["maxi dress", "party dress", "midi", "evening gown", "skirt dress"],
+    ("category", "kurtas"): ["ethnic top", "kurta set", "festive kurta", "long kurti", "sherwani"],
+    ("category", "hoodies"): ["zip up", "hooded top", "fleece hoodie", "hooded pullover", "pullovers"],
+    ("category", "jackets"): ["leather jacket", "puffer", "rain jacket", "overcoat", "denim jacket"],
+    ("category", "track pants"): ["gym pants", "workout pants", "jogging bottoms", "athletic pants", "lounge pants"],
+    ("category", "backpacks"): ["laptop bag", "travel backpack", "hiking pack", "college bag", "satchel"],
+    ("category", "caps"): ["baseball hat", "sun cap", "sports cap", "trucker cap", "peak cap"],
+    ("category", "headphones"): ["over ear", "wireless headphones", "ear buds", "gaming headset", "neckband"],
+    ("category", "watches"): ["wrist timepiece", "analog watch", "digital watch", "chronograph", "fitness watch"],
+    ("category", "wallets"): ["card holder", "money clip", "billfold wallet", "leather wallet", "clutch"],
+    ("colour", "black"): ["coal", "pitch black", "ebony", "raven"],
+    ("colour", "white"): ["pearl white", "bone", "chalk", "milky"],
+    ("colour", "blue"): ["azure", "sapphire", "turquoise", "sea blue", "indigo"],
+    ("colour", "grey"): ["steel", "graphite", "smoky", "pewter", "stone grey"],
+    ("colour", "red"): ["ruby", "tomato", "brick red", "fire engine red"],
+    ("colour", "green"): ["forest", "sea green", "jade", "parrot green"],
+    ("colour", "pink"): ["salmon", "magenta", "fuchsia", "baby pink"],
+    ("colour", "brown"): ["chestnut", "cocoa", "walnut", "coffee brown"],
+    ("colour", "beige"): ["buff", "oatmeal", "biscuit", "linen colour"],
+    ("colour", "gold"): ["brass", "bronze", "mustard gold", "yellow gold"],
+    ("colour", "navy"): ["deep navy", "naval blue", "marine blue", "ink blue"],
+    ("colour", "maroon"): ["wine red", "claret", "mahogany", "deep red"],
+    ("colour", "olive"): ["moss green", "khaki", "military green", "dark olive"],
+    ("colour", "yellow"): ["lemon", "sunflower", "banana", "golden yellow"],
+    ("colour", "silver"): ["metallic", "chrome", "platinum", "steel silver"],
+    ("colour", "tan"): ["camel", "sand brown", "caramel", "light tan"],
+}
+
+
 def understood(lexicon, term, slot, value):
     tokens = tokenize_text(term)
     match = lexicon.lookup(tokens, 0)
@@ -63,21 +101,42 @@ def understood(lexicon, term, slot, value):
     return False
 
 
+def read_as(lexicon, term, slot, value):
+    """What the whole reader (lists, WordNet file, word vectors) makes of the term on its own:
+    "listed", "semantic" (a guess from the word-vector model) or None."""
+    from anticipatory.slots import read_words
+    tokens = tokenize_text(term)
+    for m in read_words(tokens, lexicon, final=True).mentions:
+        if m.slot == slot and m.value == value:
+            return "semantic" if m.kind == "semantic" else "listed"
+    return None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--show-misses", action="store_true")
+    parser.add_argument("--held-out", action="store_true", help="use the second, held-out list")
     args = parser.parse_args(argv)
     lexicon = Lexicon.from_catalogue()
-    total = hit = 0
+    total = hit = guessed = wrong = 0
     misses = []
-    for (slot, value), terms in TERMS.items():
+    for (slot, value), terms in (HELD_OUT_TERMS if args.held_out else TERMS).items():
         for term in terms:
             total += 1
-            if understood(lexicon, term, slot, value):
+            how = read_as(lexicon, term, slot, value)
+            if how == "listed" or (how is None and understood(lexicon, term, slot, value)):
                 hit += 1
+            elif how == "semantic":
+                guessed += 1
             else:
                 misses.append(f"{term} ({value})")
-    print(f"understood {hit} of {total} ({hit / total:.0%})")
+                from anticipatory.slots import read_words
+                other = [m for m in read_words(tokenize_text(term), lexicon, final=True).mentions
+                         if m.kind == "semantic" and m.slot == slot]
+                wrong += bool(other)
+    print(f"understood from lists {hit} of {total} ({hit / total:.0%}); "
+          f"right by the word-vector guess {guessed}; wrong by the word-vector guess {wrong}; "
+          f"left unknown {total - hit - guessed - wrong}")
     if args.show_misses:
         print("missed:", ", ".join(misses))
     return 0
