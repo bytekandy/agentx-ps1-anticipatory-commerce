@@ -26,4 +26,4 @@ word -> tokens -> slot reader -> filter state -> commit policy -> search tool
 - **Honest limits:** synonyms outside the seed list are not understood, punctuation inside a phrase breaks it, long-delayed corrections are unpredictable (about 0.25 percent wrong commits on synthetic data).
 
 ## Numbers (dev, official scorer)
-Score 43.5 (baseline 20.0), accuracy 1.000, 0 wrong commits, 1.19 searches per request, 36 MB, 1.6 ms CPU per request. Details: `backend/outputs/report.md`, `docs/assumptions-and-data.md`, `docs/stream-contract.md`.
+Score 43.6 (baseline 20.0), accuracy 1.000, 0 wrong commits, 1.10 searches per request, 36 MB, 1.6 ms CPU per request. Details: `backend/outputs/report.md`, `docs/assumptions-and-data.md`, `docs/stream-contract.md`.
