@@ -12,7 +12,8 @@ was verified. Every figure below was measured; where something is a guess, it sa
 | Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 8,000 for validation, built from random catalogue products and hand-written phrasing pools | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
 | `anticipatory/data/risk_model.json` | The trained weights | Output of `scripts/train_risk.py` | Runtime risk estimate | Yes (0.8 KB) |
 | `data/dev_extra.jsonl` | **Hand-written** test requests (87), filled from real catalogue products | `scripts/build_dev_extra.py` | A test set with phrasing dev does not contain | Yes |
-| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch) |
+| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch). Its one bug was fixed, so it is no longer unseen |
+| `data/dev_blind.jsonl` (200), `data/dev_brutal.jsonl` (97) | Hand-written from an outside-author prompt, deliberately hard wording | `scripts/build_blind.py` | Development sets: their failures were studied and rules were added for them | Yes. **Not blind any more** |
 | `anticipatory/data/english_words.tsv` | **External.** The 60,000 most frequent English words with counts | Peter Norvig's `count_1w.txt` (Google web corpus counts via the LDC; educational and research use; user accepted for a hackathon) | Telling real words from typos and names | Yes (912 KB) |
 | Seed synonyms, cue words, number words, fillers | **Hand-written** language knowledge: about 90 synonyms, price and size cues, English and Hindi number words, Hindi and English fillers, correction markers | Me; part read off dev, part guessed (marked in the code) | The reader | Yes (`lexicon.py`, `numbers.py`) |
 
@@ -79,8 +80,21 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
 - The synthetic generator copies dev's rates and phrasing patterns.
 - `dev_extra` was written after reading dev, and bugs found on it were fixed, so it is no longer unseen.
 
-Nothing is fitted to dev's answers, but dev is **not** an unbiased estimate. The unbiased
-evidence is the blind set and the synthetic runs below.
+Nothing is fitted to dev's answers, but dev is **not** an unbiased estimate. `dev_blind` and
+`dev_brutal` are development sets too (their failures shaped the shade names, Hindi colour and size
+words, contrast and negation words, "not a size after" words, brand spelling mode and the denim
+rule). The only evidence nobody tuned against is the synthetic runs below (which mimic dev) and the
+hidden set itself.
+
+**Provenance and ablation** (`python scripts/provenance.py --ablate`, output in
+`outputs/provenance.md`): every group of hand-written words is counted per test set, and each group
+is switched off in turn. Result: switching off any group changes nothing on dev or dev_extra; the
+changes appear only on dev_blind and dev_brutal (up to -0.8 points and -0.021 accuracy on
+dev_brutal), the sets the groups were written from. Two groups change no set at all (footwear
+qualifiers, "not a size after" words). Most entries of the larger lists occur in no test set (for
+example 116 of 120 footwear phrases and 49 of 50 "colour word" shades): they are guesses about the
+hidden set. The connector wait is the one group that costs earliness (+0.5 on dev_extra without
+it) and buys safety (2 wrong early commits on dev_brutal without it).
 
 ## 4. The evidence and its limits
 | Test set | Size | Accuracy | Wrong early commits | Score | Kit baseline | Tuned on it? |
@@ -89,7 +103,7 @@ evidence is the blind set and the synthetic runs below.
 | dev_extra | 87 | 0.989 | 0 | 40.0 | 31.3 (0.793) | Bugs fixed on it |
 | dev_blind | 200 | 0.995 | 0 | 48.3 | 28.5 (0.720) | Failures studied, rules generalised from them |
 | dev_brutal | 97 | 1.000 | 0 | 40.4 | 24.3 (0.619) | Failures studied, rules generalised from them |
-| Blind set, before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** |
+| Blind set (44), before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** (the only unseen test, run once) |
 | Blind set after fixing the one bug it found ("price cap") | 44 | 1.000 | 0 | 43.8 | | Now yes |
 | Synthetic, 4 seeds, typo rates 0 / 0 / 5% / 15% | 20,000 | 0.9993 | 50 requests (**0.25%**) | n/a | | Model trained on the same world |
 | Random word-soup fuzz | 20,000 | n/a | n/a | n/a | | n/a |
