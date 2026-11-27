@@ -9,7 +9,7 @@ was verified. Every figure below was measured; where something is a guess, it sa
 | Item | What it is | Where it comes from | Used for | In the repo? |
 |---|---|---|---|---|
 | `catalogue.csv`, `dev.jsonl`, `search.py`, `evaluate.py` | The organisers' starter kit | Given | The product catalogue, the scorer, the public dev set | Yes, unchanged (checked byte for byte against the base commit) |
-| Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 8,000 for validation, built from random catalogue products and hand-written phrasing pools | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
+| Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 5,000 for validation, built from random catalogue products and hand-written phrasing pools. Since Stage 20, 30% of category and colour phrases come from pools written independently of the reader's synonym tables (`CATEGORY_WORDS`, `COLOUR_WORDS`, `SIZE_WORDS` in the generator): many words the reader cannot place ("trainers", "kicks", "mocha", "onyx"), so the model sees how often such words lead to a wrong early commit. The earlier generator reused the reader's own tables and could not | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
 | `anticipatory/data/risk_model.json` | The trained weights | Output of `scripts/train_risk.py` | Runtime risk estimate | Yes (0.8 KB) |
 | `data/dev_extra.jsonl` | **Hand-written** test requests (87), filled from real catalogue products | `scripts/build_dev_extra.py` | A test set with phrasing dev does not contain | Yes |
 | Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch). Its one bug was fixed, so it is no longer unseen |
@@ -66,7 +66,7 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
 | `base_risk`, `confidence_weight`, `fresh_penalty` | 0.01, 0.2, 0.5 | Reasoned, not fitted | No (guesses) |
 | `correction_window` | 6 words | Dev showed 1 to 3; 6 is a margin | Weakly |
 | `restate_confidence`, `unmarked_revision_confidence` | 0.85, 0.6 | Reasoned | No (guesses) |
-| Learned safety multiplier | 4.0 | Smallest value whose wrong-commit rate on synthetic validation requests is no higher than the rules-only policy's | No (synthetic), but the synthetic world mimics dev |
+| Learned safety multiplier | 2.5 | Smallest value whose wrong-commit rate on synthetic validation requests is no higher than the rules-only policy's and under an absolute cap of 0.15% (`train_risk.py --max-wrong-rate`) | No (synthetic), but the synthetic world mimics dev |
 | Synthetic correction rate, delayed share, slot mix, pause rates | 18.3%, 42%, size 23 / colour 18 / brand 13 / category 1, 64% vs 16% | **Measured on dev** | **Yes** |
 | Confidence by source (exact 0.95, synonym 0.85, fuzzy 0.60, bare number 0.45...) | as listed | Reasoned | No (guesses) |
 | Spelling costs and limits, real-word ratio 100 | see `config.py` | Reasoned, then checked on synthetic typos and a protected-word list | No |
@@ -99,10 +99,10 @@ it) and buys safety (2 wrong early commits on dev_brutal without it).
 ## 4. The evidence and its limits
 | Test set | Size | Accuracy | Wrong early commits | Score | Kit baseline | Tuned on it? |
 |---|---|---|---|---|---|---|
-| dev | 300 | 1.000 | 0 | 43.6 | 20.0 (0.527) | Partly (section 3) |
-| dev_extra | 87 | 0.989 | 0 | 40.0 | 31.3 (0.793) | Bugs fixed on it |
-| dev_blind | 200 | 0.995 | 0 | 48.3 | 28.5 (0.720) | Failures studied, rules generalised from them |
-| dev_brutal | 97 | 1.000 | 0 | 40.4 | 24.3 (0.619) | Failures studied, rules generalised from them |
+| dev | 300 | 1.000 | 0 | 43.3 | 20.0 (0.527) | Partly (section 3) |
+| dev_extra | 87 | 0.989 | 0 | 40.1 | 31.3 (0.793) | Bugs fixed on it |
+| dev_blind | 200 | 0.995 | 0 | 46.9 | 28.5 (0.720) | Failures studied, rules generalised from them |
+| dev_brutal | 97 | 1.000 | 0 | 40.2 | 24.3 (0.619) | Failures studied, rules generalised from them |
 | Blind set (44), before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** (the only unseen test, run once) |
 | Blind set after fixing the one bug it found ("price cap") | 44 | 1.000 | 0 | 43.8 | | Now yes |
 | Synthetic, 4 seeds, typo rates 0 / 0 / 5% / 15% | 20,000 | 0.9993 | 50 requests (**0.25%**) | n/a | | Model trained on the same world |
@@ -117,7 +117,7 @@ early is 40.0, and the cut-off is 60% of the baseline, 12.0.
 ## 5. Verification
 ### Final test (Stage 19), on a fresh clone of `main`
 - **Tests:** 467 pass with the server extras installed; 395 pass and 6 skip without them (the agent's own tests need only Python).
-- **Scores (official `evaluate.py`):** `agent.py` 43.6 on dev, 0 wrong commits; `agent_heuristic.py` 41.7; `agent_learned.py` 43.7 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.0, 0 wrong commits; kit baseline 20.0 and 31.3.
+- **Scores (official `evaluate.py`):** `agent.py` 43.3 on dev (43.6 before the risk model was retrained in Stage 20), 0 wrong commits; `agent_heuristic.py` 41.7; `agent_learned.py` 44.1 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.1, 0 wrong commits; kit baseline 20.0 and 31.3.
 - **Reproducible:** `scripts/report.py` regenerates `results.jsonl` and `results_dev_extra.jsonl` byte for byte.
 - **Kit files untouched:** `catalogue.csv`, `dev.jsonl`, `evaluate.py`, `search.py` and `README.md` in `backend/` are identical to the first commit.
 - **Determinism and causality:** 80 random requests run twice give identical outputs, and every proper prefix (939) replayed in a fresh run matches the full run exactly: no lookahead.
@@ -171,7 +171,7 @@ be taught words by use. This needs no external data.
 
 - **Separate, optional file:** `backend/anticipatory/data/learned_lexicon.json` (git-ignored). The
   agent only reads it, at start. **When the file is absent, a word the lexicon cannot place is
-  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.6 is measured
+  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.3 is measured
   without it).
 - **Evidence:** (1) a correction in a request ("clogs, I mean sandals" teaches clogs = sandals);
   (2) an accepted product (the "This is what I wanted" button, `POST /api/feedback`): if exactly one
@@ -197,3 +197,9 @@ be taught words by use. This needs no external data.
 - **Number words are ambiguous word by word.** "eight" may be size 8 or the start of "eight hundred"; price phrases run up to four words, so a number word is never acted on until it is settled.
 - **The vocabulary is small but the hidden set has unseen wording:** 300 requests use only 283 distinct tokens, which is why plurals, spelling variants, number words and Hindi forms are generalised in the lexicon rather than copied from dev.
 - **Reference agents (kit scorer):** no early commit with perfect reading 40.0; commit at the first unique product 32.7 (22 wrong commits); marker-aware with a one-word hold 39.6 (8 wrong commits). Our hybrid reaches 43.6 with none.
+
+## Stage 20 note: the training world is no longer the reader's own vocabulary
+- Before: `make_training_data.py` rendered phrases from the reader's synonym tables, so every training request was fully understood by the reader. The risk model could never learn the cost of a word the reader cannot place, and its wrong-commit estimates were optimistic.
+- Now: independent pools (30% of phrases); the unknown words make the heuristic itself less safe on the synthetic world (0.38% wrong on validation, was about 0.29%). The safety multiplier is chosen under an absolute cap of 0.15% instead of only "no worse than the heuristic" (that rule let the model get bolder exactly when the world got harder: x1.0 with 2 wrong commits on dev). Result: multiplier 2.5 (was 4.0), `conf_gap` kept non-negative, dev 43.3 (was 43.6), dev_blind 46.9 (was 48.3), 0 wrong commits on all four sets. The learned model is also more cautious on a clean request without a budget.
+- Known limit exposed (not fixed): a shade modifier ("dark blue" for navy, "dark red" for maroon, "light brown" for tan) is read as the bare colour at full confidence, so the reader can commit to the wrong colour. These three phrases are kept OUT of the training pools; handling modifiers belongs in the reader.
+- Also fixed on the way: a cue that closes a size already read ("S size ek aur...") no longer makes the next word an unknown size (`unknown.py`).

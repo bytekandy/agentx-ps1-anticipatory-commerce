@@ -193,7 +193,7 @@ class PipelineRobustnessTest(unittest.TestCase):
         from anticipatory.config import Config
         cfg = Config(spelling=SpellingConfig(enabled=spelling_on))
         lexicon = Lexicon(self.rows, spelling=cfg.spelling)
-        generator = gen.Generator(self.rows, 12, typo_rate)
+        generator = gen.Generator(self.rows, 12, typo_rate, outside_rate=0.0)
         agent = AnticipatoryAgent(InMemoryCatalog(self.rows), cfg, lexicon=lexicon)
         right = 0
         for _ in range(count):

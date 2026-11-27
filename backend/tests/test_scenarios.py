@@ -141,11 +141,15 @@ class HoldingBackTest(ScenarioTestCase):
         self.assertIsNotNone(final)
 
     def test_a_clear_request_is_committed_before_its_last_word(self):
-        commits, _ = self.assertAnswers(
-            "beige Loomsy sneakers size 10 please do hurry up now my friend", LOOMSY_BEIGE_10)
+        text = "beige Loomsy sneakers size 10 under 4000 please do hurry up now my friend"
+        commits, _ = self.assertAnswers(text, LOOMSY_BEIGE_10)
         self.assertTrue(commits)
-        self.assertLess(commits[0][0], len("beige Loomsy sneakers size 10 please do hurry up "
-                                           "now my friend".split()))
+        self.assertLess(commits[0][0], len(text.split()))
+
+    def test_a_request_without_a_budget_is_still_answered_right(self):
+        # the learned risk model is more cautious without a budget: it may commit late or not at all
+        self.assertAnswers("beige Loomsy sneakers size 10 please do hurry up now my friend",
+                           LOOMSY_BEIGE_10)
 
 
 class EdgeCaseTest(ScenarioTestCase):

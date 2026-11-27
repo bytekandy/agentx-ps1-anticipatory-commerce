@@ -66,6 +66,7 @@ def find_unresolved(reading: Reading, lexicon: Lexicon, config: Config = DEFAULT
     english = english or english_words()
     tokens = reading.tokens
     covered: Set[int] = {i for m in reading.mentions for i in range(m.start, m.end)}
+    size_closers = {m.end for m in reading.mentions if m.slot == "size"}   # index just after a size
     product_starts = {m.start for m in reading.mentions
                       if m.slot in ("category", "colour", "brand")}
     out: List[Unresolved] = []
@@ -123,8 +124,9 @@ def find_unresolved(reading: Reading, lexicon: Lexicon, config: Config = DEFAULT
                 continue
 
         # sizes: a cue next to a size nothing answers to
-        cue_before = before is not None and before.text in SIZE_CUES
-        cue_after = after is not None and after.text in SIZE_CUES
+        # (a cue right after a size already read, "M size", closes that size: no number follows)
+        cue_before = before is not None and before.text in SIZE_CUES and (i - 1) not in size_closers
+        cue_after = after is not None and after.text in SIZE_CUES and (i + 1) not in size_closers
         if (cue_before or cue_after) and i not in covered:
             reading_n = read_number(tokens, i)
             if reading_n and reading_n.value < 100 and lexicon.size_from_number(reading_n.value) is None:

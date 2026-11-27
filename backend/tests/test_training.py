@@ -23,7 +23,7 @@ class TrainingTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.rows = load_rows()
         cls.lex = Lexicon(cls.rows)
-        generator = Generator(cls.rows, 7)
+        generator = Generator(cls.rows, 7, outside_rate=0.0)
         cls.requests = [generator.request() for _ in range(1500)]
 
 
@@ -37,7 +37,7 @@ class GeneratorTest(TrainingTestCase):
                          [g2.request()["text"] for _ in range(20)])
 
     def test_the_filters_pin_exactly_the_target(self):
-        generator = Generator(self.rows, 11)
+        generator = Generator(self.rows, 11, outside_rate=0.0)
         for _ in range(100):
             req = generator.request()
             hits = generator.catalog.find(req["filters"], "", 50)
@@ -111,7 +111,7 @@ class TypoGeneratorTest(TrainingTestCase):
         self.assertEqual(fixes, 0)
 
     def test_typo_rate_puts_typos_in_product_words_only(self):
-        generator = Generator(self.rows, 5, typo_rate=1.0)
+        generator = Generator(self.rows, 5, typo_rate=1.0, outside_rate=0.0)
         fixed = numbers = 0
         for _ in range(200):
             req = generator.request()
@@ -158,7 +158,7 @@ class ExamplesTest(TrainingTestCase):
         self.assertTrue(all(e["label"] == 1 for e in examples))
 
     def test_a_correction_after_a_commit_candidate_is_labelled_wrong(self):
-        generator = Generator(self.rows, 21)
+        generator = Generator(self.rows, 21, outside_rate=0.0)
         saw_wrong = saw_right = False
         for _ in range(400):
             req = generator.request()
@@ -228,3 +228,54 @@ class SimulateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutsideWordsTest(unittest.TestCase):
+    """The shopper's world is not a copy of the reader's synonym tables."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = load_rows()
+        cls.lex = Lexicon(cls.rows)
+
+    def test_pools_hold_words_the_reader_cannot_place(self):
+        from make_training_data import CATEGORY_WORDS, COLOUR_WORDS
+        from anticipatory.tokens import tokenize_text
+
+        def unknown(pools):
+            return [w for words in pools.values() for w in words
+                    if not (m := self.lex.lookup(tokenize_text(w), 0))
+                    or m.length != len(tokenize_text(w))]
+        self.assertGreater(len(unknown(CATEGORY_WORDS)), 10)      # "trainers", "kicks", "gown"...
+        self.assertGreater(len(unknown(COLOUR_WORDS)), 10)        # "onyx", "mocha", "cobalt"...
+
+    def test_the_generator_writes_them_at_the_given_rate(self):
+        closed = Generator(self.rows, 4, outside_rate=0.0)
+        opened = Generator(self.rows, 4, outside_rate=1.0)
+        from make_training_data import CATEGORY_WORDS
+        words = {w for ws in CATEGORY_WORDS.values() for w in ws}
+        self.assertTrue(all(closed.category_phrase("sandals") not in words - {"sandal"}
+                            for _ in range(50)))
+        self.assertTrue(all(opened.category_phrase("sandals") in CATEGORY_WORDS["sandals"]
+                            for _ in range(50)))
+
+
+class NonNegativeFitTest(unittest.TestCase):
+    def test_a_feature_that_may_only_add_risk_is_never_negative(self):
+        from train_risk import NON_NEGATIVE
+        from anticipatory.risk import FEATURE_NAMES
+        j = FEATURE_NAMES.index("conf_gap")
+        rng = random.Random(3)
+        rows = []
+        for _ in range(400):                              # data where a bigger gap means FEWER errors
+            gap = rng.choice([0.0, 0.3])
+            vec = tuple(1.0 if k == 0 else (gap if k == j else 0.0) for k in range(len(FEATURE_NAMES)))
+            rows.append({"vec": vec, "wrong": 1 if rng.random() < (0.02 if gap else 0.2) else 0})
+        groups = {}
+        for r in rows:
+            n, w = groups.get(r["vec"], (0, 0))
+            groups[r["vec"]] = (n + 1, w + r["wrong"])
+        data = [(vec, n, w) for vec, (n, w) in groups.items()]
+        from train_risk import fit
+        self.assertIn("conf_gap", NON_NEGATIVE)
+        self.assertGreaterEqual(fit(data)[j], 0.0)
