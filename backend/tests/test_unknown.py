@@ -99,7 +99,7 @@ class UnknownColourTest(UnknownTestCase):
 
     def test_before_a_brand_or_colour(self):
         self.assertFlagged("purple Mehrin dress size S", "brand, colour or style", "purple")
-        self.assertFlagged("sky blue sneakers size 9", "brand, colour or style", "sky")
+        self.assertFlagged("pastel blue sneakers size 9", "brand, colour or style", "pastel")
 
     def test_after_in(self):
         self.assertFlagged("black sneakers in violet size 9", "colour or style", "violet")

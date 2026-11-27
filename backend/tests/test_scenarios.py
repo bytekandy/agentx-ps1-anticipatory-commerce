@@ -174,3 +174,15 @@ class EdgeCaseTest(ScenarioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GeneratedWordTest(ScenarioTestCase):
+    """Words from the WordNet file are understood for the final answer but never commit early."""
+
+    def test_a_generated_category_word_gives_the_right_answer_without_an_early_commit(self):
+        self.assertAnswers("beige Loomsy gym shoe size 10 under 4000 please do hurry now", LOOMSY_BEIGE_10,
+                           allow_early=False)
+
+    def test_a_generated_colour_word_gives_the_right_answer_without_an_early_commit(self):
+        self.assertAnswers("cerulean Northweft jeans waist 32 under 2000 please do hurry now", JEANS_BLUE_32,
+                           allow_early=False)

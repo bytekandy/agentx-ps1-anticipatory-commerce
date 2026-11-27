@@ -1,0 +1,288 @@
+{
+ "category": {
+  "backpacks": [
+   "back pack",
+   "haversack",
+   "knapsack",
+   "packsack",
+   "rucksack"
+  ],
+  "caps": [
+   "balaclava",
+   "balaclava helmet",
+   "baseball cap",
+   "bathing cap",
+   "beret",
+   "berretta",
+   "biggin",
+   "biretta",
+   "birretta",
+   "calpac",
+   "calpack",
+   "cloth cap",
+   "coonskin",
+   "coonskin cap",
+   "flat cap",
+   "garrison cap",
+   "golf cap",
+   "jockey cap",
+   "kalansuwa",
+   "kalpac",
+   "kepi",
+   "liberty cap",
+   "mobcap",
+   "overseas cap",
+   "peaked cap",
+   "pinner",
+   "sailor cap",
+   "service cap",
+   "shower cap",
+   "ski cap",
+   "skullcap",
+   "stocking cap",
+   "swimming cap",
+   "tam",
+   "tarboosh",
+   "toboggan cap",
+   "watch cap",
+   "wishing cap",
+   "yachting cap"
+  ],
+  "dresses": [
+   "coatdress",
+   "cocktail dress",
+   "dress",
+   "gown",
+   "pinafore",
+   "pinny",
+   "shirtdress",
+   "strapless",
+   "sundress"
+  ],
+  "headphones": [
+   "earphone",
+   "earpiece"
+  ],
+  "hoodies": [
+   "sweatshirt"
+  ],
+  "jackets": [
+   "anorak",
+   "bed jacket",
+   "blazer",
+   "bomber jacket",
+   "bush jacket",
+   "dolman",
+   "dolman jacket",
+   "donkey jacket",
+   "double-breasted jacket",
+   "doublet",
+   "dressing sack",
+   "dressing sacque",
+   "hug-me-tight",
+   "jerkin",
+   "lumber jacket",
+   "mess jacket",
+   "monkey jacket",
+   "morning coat",
+   "parka",
+   "pea jacket",
+   "peacoat",
+   "sacque",
+   "shell jacket",
+   "single-breasted jacket",
+   "sport coat",
+   "sport jacket",
+   "sports coat",
+   "sports jacket",
+   "swallow-tailed coat",
+   "swallowtail",
+   "windbreaker",
+   "windcheater"
+  ],
+  "jeans": [
+   "denim"
+  ],
+  "kurtas": [],
+  "running shoes": [],
+  "sandals": [
+   "espadrille",
+   "huarache",
+   "huaraches",
+   "scuffer",
+   "talaria",
+   "zori"
+  ],
+  "shirts": [],
+  "sneakers": [
+   "gym shoe",
+   "tennis shoe"
+  ],
+  "t-shirts": [
+   "tee shirt"
+  ],
+  "track pants": [
+   "sweat pants",
+   "sweatpants"
+  ],
+  "wallets": [
+   "billfold",
+   "notecase"
+  ],
+  "watches": [
+   "analog watch",
+   "digital watch",
+   "hunting watch",
+   "pendulum watch",
+   "pocket watch",
+   "stem-winder",
+   "watch",
+   "wrist watch",
+   "wristwatch"
+  ]
+ },
+ "colour": {
+  "beige": [
+   "ecru"
+  ],
+  "black": [
+   "coal black",
+   "ebony",
+   "jet black",
+   "pitch black",
+   "soot black"
+  ],
+  "blue": [
+   "aqua",
+   "azure",
+   "cerulean",
+   "cobalt blue",
+   "greenish blue",
+   "lazuline",
+   "peacock blue",
+   "powder blue",
+   "purplish blue",
+   "royal blue",
+   "sky-blue",
+   "steel blue"
+  ],
+  "brown": [
+   "burnt sienna",
+   "caramel brown",
+   "puce",
+   "raw sienna",
+   "reddish brown",
+   "sepia",
+   "taupe",
+   "yellowish brown"
+  ],
+  "gold": [],
+  "green": [
+   "bluish green",
+   "bottle green",
+   "jade green",
+   "pea green",
+   "sage green",
+   "sea green",
+   "teal",
+   "viridity",
+   "yellowish green"
+  ],
+  "grey": [
+   "ash gray",
+   "ash grey",
+   "charcoal gray",
+   "charcoal grey",
+   "dapple-gray",
+   "dapple-grey",
+   "dappled-gray",
+   "dappled-grey",
+   "gray",
+   "iron-gray",
+   "iron-grey",
+   "oxford gray",
+   "oxford grey",
+   "steel gray",
+   "steel grey",
+   "tattletale gray",
+   "tattletale grey"
+  ],
+  "maroon": [],
+  "navy": [],
+  "olive": [
+   "drab",
+   "olive drab"
+  ],
+  "pink": [
+   "coral",
+   "purplish pink",
+   "salmon pink",
+   "solferino",
+   "yellowish pink"
+  ],
+  "red": [
+   "alizarine red",
+   "carmine",
+   "cerise",
+   "cherry red",
+   "chrome red",
+   "crimson",
+   "orange red",
+   "purplish red",
+   "purplish-red",
+   "sanguine",
+   "scarlet",
+   "vermilion"
+  ],
+  "tan": [],
+  "white": [
+   "bleach",
+   "off-white"
+  ],
+  "yellow": [
+   "brownish yellow",
+   "canary yellow",
+   "greenish yellow",
+   "lemon yellow",
+   "orange yellow"
+  ]
+ },
+ "seeds": {
+  "category": {
+   "backpacks": "backpack.n.01",
+   "caps": "cap.n.01",
+   "dresses": "dress.n.01",
+   "headphones": "earphone.n.01",
+   "hoodies": "sweatshirt.n.01",
+   "jackets": "jacket.n.01",
+   "jeans": "jean.n.01",
+   "kurtas": "kurta.n.01",
+   "running shoes": "running_shoe.n.01",
+   "sandals": "sandal.n.01",
+   "shirts": "shirt.n.01",
+   "sneakers": "gym_shoe.n.01",
+   "t-shirts": "jersey.n.03",
+   "track pants": "sweat_pants.n.01",
+   "wallets": "wallet.n.01",
+   "watches": "watch.n.01"
+  },
+  "colour": {
+   "beige": "beige.n.01",
+   "black": "black.n.01",
+   "blue": "blue.n.01",
+   "brown": "brown.n.01",
+   "gold": "amber.n.01",
+   "green": "green.n.01",
+   "grey": "gray.n.01",
+   "maroon": "maroon.n.02",
+   "navy": "dark_blue.n.01",
+   "olive": "olive.n.05",
+   "pink": "pink.n.01",
+   "red": "red.n.01",
+   "tan": "tan.n.02",
+   "white": "white.n.02",
+   "yellow": "yellow.n.01"
+  }
+ },
+ "source": "Princeton WordNet 3.0 through nltk, built by scripts/build_wordnet_lexicon.py"
+}

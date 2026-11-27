@@ -23,6 +23,7 @@ Safety rules
     class builds from its own vocabulary; see that module for its guards.
 """
 import csv
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, replace
@@ -46,29 +47,29 @@ CATEGORY_SYNONYMS = {
                 # not seen in dev:
                 "flip flops", "chappals", "sliders", "slippers", "chappal"],
     "t-shirts": ["tshirt", "tee", "t shirt",
-                 # not seen in dev:
-                 "tee shirt"],
+                 # (more t-shirt words come from the WordNet file, see `generated_lexicon.json`)
+                 ],
     "jeans": ["denims", "denim"],
     "track pants": ["trackpants", "joggers",
                     # not seen in dev:
-                    "trackies", "sweatpants"],
+                    "trackies"],
     "hoodies": ["hooded sweatshirt", "sweatshirt",
                 # not seen in dev:
                 "hoody"],
     "backpacks": ["bag pack", "rucksack", "bag",
                   # not seen in dev:
-                  "back pack", "bagpack"],
+                  "bagpack"],
     # A sport qualifier before a Hindi or English shoe word: see FOOTWEAR_QUALIFIED below.
     "headphones": ["headset",
                    # not seen in dev:
-                   "earphones", "earbuds", "head phones"],
+                   "earbuds", "head phones"],
     "watches": ["wrist watch", "wristwatch",
                 # not seen in dev:
                 "smartwatch", "smart watch", "ghadi"],
     # not seen in dev:
     "kurtas": ["kurti"],
     "dresses": ["frock"],
-    "jackets": ["coat", "windcheater"],
+    "jackets": ["coat"],
     "caps": ["topi"],
     "wallets": ["purse"],
 }
@@ -199,7 +200,19 @@ FILLER_WORDS: FrozenSet[str] = frozenset({
 
 # ----------------------------------------------------------------------------- data types
 
-_PRIORITY = {"exact": 0, "variant": 1, "synonym": 2}
+_PRIORITY = {"exact": 0, "variant": 1, "synonym": 2, "generated": 3}
+
+DEFAULT_GENERATED_PATH = Path(__file__).resolve().parent / "data" / "generated_lexicon.json"
+
+
+def load_generated(path: Optional[Path] = None) -> Dict[str, Dict[str, List[str]]]:
+    """The WordNet-built synonyms (`scripts/build_wordnet_lexicon.py`): {"category": {value: [words]},
+    "colour": {...}}. A missing or unreadable file means no generated words."""
+    try:
+        data = json.loads((path or DEFAULT_GENERATED_PATH).read_text(encoding="utf-8"))
+        return {slot: data[slot] for slot in ("category", "colour") if slot in data}
+    except (OSError, ValueError):
+        return {}
 
 
 @dataclass(frozen=True)
@@ -296,8 +309,11 @@ def _generated_phrases() -> List[Tuple[str, str, str]]:
 class Lexicon:
     def __init__(self, rows: Iterable[Dict[str, str]], config: Optional[VocabConfig] = None,
                  spelling: Optional[SpellingConfig] = None,
-                 learned: Optional[Dict[str, Tuple[str, str]]] = None):
+                 learned: Optional[Dict[str, Tuple[str, str]]] = None,
+                 generated: Optional[Dict[str, Dict[str, List[str]]]] = None):
+        """`generated` are WordNet-built synonyms; None loads the shipped file, {} uses none."""
         rows = list(rows)
+        self._generated = load_generated() if generated is None else generated
         self.config = config or DEFAULT_CONFIG.vocab
         self.categories: FrozenSet[str] = frozenset(r["category"] for r in rows)
         self.colours: FrozenSet[str] = frozenset(r["colour"] for r in rows)
@@ -345,6 +361,7 @@ class Lexicon:
             "exact": self.config.confidence_exact,
             "variant": self.config.confidence_variant,
             "synonym": self.config.confidence_synonym,
+            "generated": self.config.confidence_generated,
             "learned": self.config.confidence_learned,
         }
 
@@ -427,6 +444,12 @@ class Lexicon:
             known = {"category": self.categories, "colour": self.colours, "size": self.letter_sizes}
             if value in known[slot]:
                 collect(phrase, slot, value, "synonym")
+
+        for slot, known in (("category", self.categories), ("colour", self.colours)):
+            for value, phrases in self._generated.get(slot, {}).items():
+                if value in known:
+                    for phrase in phrases:
+                        collect(phrase, slot, value, "generated", inflect=(slot == "category"))
 
         resolved: Set[Tuple[str, ...]] = set()
         for rank in sorted(set(_PRIORITY.values())):

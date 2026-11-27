@@ -197,7 +197,7 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         restated = m.via == "bare" and marked and m.slot in events
         if restated:
             confidence = max(confidence, cfg.restate_confidence)       # a restatement
-        elif (m.slot == "size" and m.via == "bare") or m.kind == "fuzzy":
+        elif (m.slot == "size" and m.via == "bare") or m.kind in ("fuzzy", "generated"):
             guessed.append(f"{m.slot}: {m.value}")
             if m.slot == "size" and said_category and lexicon.category_has_sizes(said_category) \
                     and size_fits_category(str(m.value), said_category, lexicon) \

@@ -362,3 +362,48 @@ class TransliterationTest(unittest.TestCase):
                 seen.setdefault(transliteration_key(key[0]), set()).add((entry.slot, entry.value))
         for key in self.lex._respell:
             self.assertEqual(len(seen[key]), 1, key)
+
+
+class GeneratedLexiconTest(unittest.TestCase):
+    """The WordNet-built synonyms: loaded, low confidence, and clean by the build rules."""
+
+    @classmethod
+    def setUpClass(cls):
+        from anticipatory.lexicon import load_generated
+        cls.rows = load_rows()
+        cls.data = load_generated()
+        cls.lex = Lexicon(cls.rows)
+
+    def test_the_file_holds_words_for_both_slots(self):
+        self.assertGreater(sum(len(v) for v in self.data["category"].values()), 50)
+        self.assertGreater(sum(len(v) for v in self.data["colour"].values()), 40)
+
+    def test_a_generated_word_reads_with_the_generated_confidence(self):
+        for text, slot, value in (("knapsack", "category", "backpacks"), ("billfold", "category", "wallets"),
+                                  ("cerulean", "colour", "blue"), ("windbreaker", "category", "jackets")):
+            with self.subTest(text=text):
+                match = first_match(self.lex, text)
+                self.assertEqual((match.slot, match.value, match.kind), (slot, value, "generated"))
+                self.assertEqual(match.confidence, self.lex.config.confidence_generated)
+
+    def test_a_hand_written_word_wins_over_a_generated_one(self):
+        self.assertEqual(first_match(self.lex, "slides").kind, "synonym")
+
+    def test_the_build_rules_hold(self):
+        colours = {r["colour"] for r in self.rows}
+        for value, words in self.data["category"].items():
+            for w in words:
+                self.assertFalse(set(w.replace("-", " ").split()) & colours, (value, w))
+        for slot in ("category", "colour"):
+            seen = {}
+            for value, words in self.data[slot].items():
+                for w in words:
+                    self.assertNotIn(w, seen, f"{w} claimed by {seen.get(w)} and {value}")
+                    seen[w] = value
+                    self.assertFalse(w.endswith("ness"), w)
+        for w in ("sari", "saree", "caftan"):
+            self.assertIsNone(first_match(self.lex, w), w)
+
+    def test_without_the_file_nothing_is_added(self):
+        plain = Lexicon(self.rows, generated={})
+        self.assertIsNone(first_match(plain, "knapsack"))

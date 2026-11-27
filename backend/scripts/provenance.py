@@ -55,6 +55,9 @@ def entries() -> Dict[str, List[str]]:
         "seed synonyms (category, colour, size)": (_flat(lexicon.CATEGORY_SYNONYMS)
                                                    + _flat(lexicon.COLOUR_SYNONYMS)
                                                    + _flat(lexicon.SIZE_SYNONYMS)),
+        "WordNet-generated words (generated_lexicon.json)": [
+            w for slot in ("category", "colour") for ws in lexicon.load_generated().get(slot, {}).values()
+            for w in ws],
         "sandal words added later (sliders, slippers, chappal)": ["sliders", "slippers", "chappal"],
         "shade names (SHADE_SYNONYMS)": _flat(lexicon.SHADE_SYNONYMS),
         "shade + colour word (COLOUR_WORD_SHADES)": [p for p, s, _ in generated
@@ -125,6 +128,7 @@ def _switches() -> List[Tuple[str, callable]]:
         return lambda: setattr(slots, "_correct_brands", old)
 
     return [
+        ("WordNet-generated words", patch(lexicon, "load_generated", lambda path=None: {})),
         ("sandal words added later", sandal_extra),
         ("shade names", patch(lexicon, "SHADE_SYNONYMS", {})),
         ("shade + colour word", patch(lexicon, "COLOUR_WORD_SHADES", {})),

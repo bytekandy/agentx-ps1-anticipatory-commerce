@@ -24,7 +24,7 @@ Three patterns, each needing an unexplained word:
             also a size that exists but not for the category ("size 32 sandals", "size M cap").
   colour, style or brand
             a word right before a category, colour or brand word that nothing explains
-            ("purple shirt", "nike sneakers", "purple Mehrin dress", "sky blue"), a word after "in" that nothing explains ("sneakers in purple"),
+            ("purple shirt", "nike sneakers", "purple Mehrin dress", "pastel blue"), a word after "in" that nothing explains ("sneakers in purple"),
             or a word next to "colour" ("purple colour").
 
 Every pattern is cautious on purpose: a false flag only costs a little earliness (the agent
