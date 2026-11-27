@@ -8,7 +8,7 @@ A deterministic agent with no language model calls. It reads each word, keeps a 
 
 ## Results (public dev set, scored by the organisers' evaluate.py)
 - Score 43.6 against 20.0 for the kit baseline; right final answer on all 300 requests (baseline 0.527); zero wrong early commits.
-- 87 requests we wrote with new phrasing: 40.0 against 31.3, no wrong early commit. Two outside-author sets, since used for development: 48.1 and 40.4.
+- 87 requests we wrote with new phrasing: 40.0 against 31.3, no wrong early commit. Two outside-author sets, since used for development: 48.3 and 40.4.
 - 20,000 synthetic requests: about 0.25 percent end in a wrong early commit.
 Dev scores are optimistic: some vocabulary and tuning came from reading dev. The earliness gain is modest by design (6.4 percent of the request out of 16.3 possible): every faster setting we tried added wrong commits.
 
