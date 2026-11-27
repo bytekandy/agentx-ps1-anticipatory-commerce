@@ -39,6 +39,10 @@ from .tokens import Token, make_tokens
 MARKER_PHRASES = frozenset({("make", "that"), ("make", "it")})
 # A word that, said last, almost always opens a two-word marker: wait one word to see.
 MARKER_STARTERS = frozenset({"make"})
+# A connector said last announces another value ("...grey in", "...XXL, and", "same but"):
+# wait one word to see it. A connector that ends a clause ("in." "and,") announces nothing.
+CONNECTORS = frozenset({"in", "and", "also", "but", "plus", "or", "with", "of", "aur", "mein",
+                        "same"})
 
 # Slots in the order the evaluator expects; `min_price` is added only when it is present.
 REPORTED_SLOTS = ("category", "colour", "size", "brand", "max_price")
@@ -195,7 +199,8 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         markers=tuple(markers),
         pending_slots=tuple(pending),
         correction_pending=_correction_pending(markers, heard, words, cfg),
-        cue_pending=_something_follows(tokens, mentions),
+        cue_pending=(_something_follows(tokens, mentions)
+                     or _connector_pending(tokens, mentions, cfg.connector_window)),
         unresolved=tuple(sorted(unresolved, key=lambda u: u.start)),
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
@@ -246,6 +251,7 @@ def _fold(slot: str, events: Sequence[_Event], cfg) -> Optional[SlotBelief]:
 def _something_follows(tokens: Sequence[Token], mentions: Sequence[SlotMention] = ()) -> bool:
     """The words end on a word that announces more: a size or price cue awaiting its number,
     or "make" (which may be about to become "make that"). "make sure" costs one word of wait.
+    Connectors ("in", "and", "but") are `_connector_pending`.
 
     A cue that closes a size already heard ("M size", "XXL size", "size 8 UK") announces
     nothing: no number is coming.
@@ -254,6 +260,17 @@ def _something_follows(tokens: Sequence[Token], mentions: Sequence[SlotMention] 
             m.slot == "size" and m.end == len(tokens) - 1 for m in mentions):
         return bool(tokens[-1].text in MARKER_STARTERS)
     return cue_awaiting_number(tokens) or (bool(tokens) and tokens[-1].text in MARKER_STARTERS)
+
+
+def _connector_pending(tokens: Sequence[Token], mentions: Sequence[SlotMention], window: int) -> bool:
+    """A connector was said in the last `window` words, and neither a value nor a pause has
+    followed it yet."""
+    for c in range(len(tokens) - 1, max(-1, len(tokens) - 1 - window), -1):
+        if tokens[c].clause_end:
+            return False                                  # a pause after the connector: closed
+        if tokens[c].text in CONNECTORS:
+            return not any(m.start > c for m in mentions)
+    return False
 
 
 def _correction_pending(markers: Sequence[Marker], heard: Sequence[SlotMention],
