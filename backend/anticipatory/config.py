@@ -164,6 +164,14 @@ class SpellingConfig:
     channel_weight: float = 2.0       # how strongly the channel outweighs the word prior
     min_margin: float = 0.5           # the best candidate must beat the runner-up by this
 
+    # Brand mode: a capitalised word nothing explains is compared with the brand names alone,
+    # without the real-word guard ("Northwest" for Northweft) and with one more edit allowed for
+    # long words ("Zentrale" for Zentrail). Its mention is fuzzy, so never an early commit.
+    brand_mode: bool = True
+    brand_min_length: int = 6
+    brand_extra_cost: float = 1.0
+    brand_min_english_rank: int = 2000   # "Strong", "Looking" are words, never misspelt brands
+
 
 @dataclass(frozen=True)
 class UnknownConfig:

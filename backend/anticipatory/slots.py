@@ -27,7 +27,7 @@ from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import PRICE_CUES, SIZE_CUES, Lexicon
 from .numbers import NumberReading, read_number
-from .tokens import Token
+from .tokens import Token, english_words
 
 SLOTS = ("category", "colour", "brand", "size", "max_price", "min_price")
 
@@ -89,6 +89,30 @@ def _drop_possessives(tokens: Sequence[Token], lexicon: Lexicon) -> List[Token]:
     return out
 
 
+def _correct_brands(tokens: List[Token], corrected: FrozenSet[int],
+                    lexicon: Lexicon) -> Tuple[List[Token], FrozenSet[int]]:
+    """Brand mode: a capitalised word the lexicon cannot place, long enough and not a common
+    English word, may be a misspelt brand ("Northwest beige shirt" for Northweft)."""
+    cfg = lexicon.corrector.cfg
+    if not cfg.brand_mode:
+        return tokens, corrected
+    english = english_words()
+    out, changed = list(tokens), set(corrected)
+    for i, token in enumerate(tokens):
+        text = token.text
+        if (i in corrected or not token.raw[:1].isupper() or len(text) < cfg.brand_min_length
+                or text in lexicon.known_words):
+            continue
+        rank = english.rank(text)
+        if rank is not None and rank < cfg.brand_min_english_rank:
+            continue
+        fixed = lexicon.brand_corrector.correct(text)
+        if fixed:
+            out[i] = replace(token, text=fixed)
+            changed.add(i)
+    return out, frozenset(changed)
+
+
 def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
                      config: Config = DEFAULT_CONFIG, final: bool = False) -> List[SlotMention]:
     """All slot mentions in the words so far; see `read_words` for the full reading."""
@@ -108,6 +132,7 @@ def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAU
     mentions: List[SlotMention] = []
     tokens = _drop_possessives(tokens, lexicon)
     tokens, corrected = lexicon.corrector.correct_tokens(tokens)
+    tokens, corrected = _correct_brands(tokens, corrected, lexicon)
     corrected_tokens = tuple(tokens)
     i = 0
     while i < len(tokens):

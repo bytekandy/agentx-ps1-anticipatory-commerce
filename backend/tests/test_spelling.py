@@ -6,6 +6,7 @@ from pathlib import Path
 from anticipatory.config import SpellingConfig
 from anticipatory.lexicon import Lexicon, load_rows
 from anticipatory.spelling import NEIGHBOURS, SpellingCorrector, edit_cost
+from anticipatory.state import build_snapshot
 from anticipatory.tokens import tokenize, tokenize_text
 
 DEV_PATH = Path(__file__).resolve().parents[1] / "dev.jsonl"
@@ -208,6 +209,29 @@ class PipelineRobustnessTest(unittest.TestCase):
         with_spelling = self.accuracy(True)
         self.assertGreaterEqual(with_spelling, 0.97)
         self.assertGreaterEqual(with_spelling - without, 0.05)
+
+
+class BrandModeTest(unittest.TestCase):
+    """A capitalised word nothing explains is checked against the brand names alone."""
+
+    @classmethod
+    def setUpClass(cls):
+        lex = Lexicon(load_rows())
+        cls.read = staticmethod(lambda text: build_snapshot(tokenize_text(text), lex, final=True))
+
+    def test_a_misspelt_brand_that_is_an_english_word_is_read(self):
+        s = self.read("Northwest beige shirt L")
+        self.assertEqual(s.filters["brand"], "Northweft")
+        self.assertIn("brand: Northweft", s.guessed)            # never an early commit
+
+    def test_one_more_edit_for_a_long_brand(self):
+        self.assertEqual(self.read("Zentrale black running shoes 8").filters["brand"], "Zentrail")
+
+    def test_common_or_lower_case_words_are_left_alone(self):
+        for text in ("Looking for Strong black sneakers", "Need Northern shirt",
+                     "northwest beige shirt L"):
+            with self.subTest(text=text):
+                self.assertIsNone(self.read(text).filters["brand"])
 
 
 if __name__ == "__main__":
