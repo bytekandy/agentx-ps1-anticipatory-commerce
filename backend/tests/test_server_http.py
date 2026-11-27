@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -15,6 +16,13 @@ from websockets.sync.client import connect  # noqa: E402
 
 from server.app import Settings, create_app  # noqa: E402
 from server.service import Limits, StreamService  # noqa: E402
+
+
+def committed_dev_score() -> float:
+    """The dev score in outputs/report.md, which scripts/report.py writes with the results."""
+    report = (Path(__file__).resolve().parents[1] / "outputs" / "report.md").read_text(encoding="utf-8")
+    return float(re.search(r"\| \*\*score\*\* \| \*\*([\d.]+)\*\*", report).group(1))
+
 
 WORDS = "beige Loomsy sneakers size 10 under 3000 please".split()
 SERVICE = StreamService()
@@ -304,7 +312,7 @@ class ExamplesAndResultsTest(ServerTestCase):
 
     def test_results(self):
         result = self.client.get("/api/results/dev").json()
-        self.assertAlmostEqual(result["summary"]["score"], 43.5, delta=0.05)
+        self.assertAlmostEqual(result["summary"]["score"], committed_dev_score(), delta=0.05)
         self.assertEqual(self.client.get("/api/results/nope").status_code, 404)
 
 

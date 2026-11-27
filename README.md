@@ -8,7 +8,7 @@ A shopping request arrives one word at a time: "black running shoes, size nine, 
 
 How it is scored (the organisers' `evaluate.py`): 0.4 for the right final answer, plus 0.6 times the share of the request still to come at the first right commit, minus 1.0 per wrong commit, minus 0.02 per search after the first.
 
-On the public dev set: **43.5** against the kit baseline's 20.0, every final answer right, no wrong early commit. On 87 extra hand-written requests with unseen phrasing: 40.5 against 31.3. About 1.5 ms of CPU per request, no model API. Full numbers: [`backend/outputs/report.md`](backend/outputs/report.md); per-request dev output (as the organisers ask): `backend/outputs/results.jsonl`.
+On the public dev set: **43.6** against the kit baseline's 20.0, every final answer right, no wrong early commit. On 87 extra hand-written requests with unseen phrasing: 40.0 against 31.3. On two further sets written from an outside-author prompt, blind (200 requests) and brutal (97, deliberately hard wording): 48.1 and 40.4 against 28.5 and 24.3, accuracy 0.990 and 1.000, no wrong early commit. Their failures were studied to improve the reader, so they are now development sets, not blind tests. About 1.5 ms of CPU per request, no model API. Full numbers: [`backend/outputs/report.md`](backend/outputs/report.md); per-request dev output (as the organisers ask): `backend/outputs/results.jsonl`.
 
 ## How the agent thinks
 
@@ -57,6 +57,20 @@ docs/              abstract, architecture note, assumptions and data, stream con
 ```
 
 ## Run it
+
+Quickest start (macOS, Linux, or Git Bash / WSL on Windows; Python 3.11 or newer and curl): one command sets up the backend on the first run (`backend/.venv`), starts the API and the page, connects them and opens your browser. Ctrl-C stops both. On macOS you can double-click `start.command` instead.
+
+```
+./run.sh                            # page on http://127.0.0.1:5173/, API on http://127.0.0.1:8765
+BACKEND_PORT=9000 FRONTEND_PORT=3000 ./run.sh     # other ports; NO_BROWSER=1 to skip the browser
+```
+
+Or run each part on its own:
+
+```
+./backend/setup.sh                  # API and page together on :8765 (--api-only, --setup-only, --port N)
+./frontend/run.sh                   # page only on :5173, using the API on :8765 (--port N, --api URL)
+```
 
 Requires Python 3.14. The agent needs nothing installed. Run everything from `backend/`.
 

@@ -127,5 +127,24 @@ class EnglishWordsTest(unittest.TestCase):
         self.assertTrue(DEFAULT_WORDS_PATH.exists())
 
 
+class GluedWordsTest(unittest.TestCase):
+    def texts(self, word):
+        return [(t.text, t.clause_end) for t in make_tokens(word)]
+
+    def test_words_glued_by_punctuation_are_split(self):
+        self.assertEqual(self.texts("black,size9,Pacevo"),
+                         [("black", True), ("size", False), ("9", True), ("pacevo", False)])
+        self.assertEqual(self.texts("navy/blue"), [("navy", False), ("blue", False)])
+
+    def test_a_price_cue_glued_to_its_number_is_split(self):
+        self.assertEqual(self.texts("under1000"), [("under", False), ("1000", False)])
+
+    def test_numbers_and_compound_words_stay_whole(self):
+        for word, text in (("Rs.1,500,", "1500"), ("1,00,000", "100000"), ("t-shirt", "t-shirt"),
+                           ("3.5k", "3.5k"), ("2XL", "2xl"), ("1500/-", "1500"), ("2/3", "2/3")):
+            with self.subTest(word=word):
+                self.assertEqual([t.text for t in make_tokens(word)], [text])
+
+
 if __name__ == "__main__":
     unittest.main()

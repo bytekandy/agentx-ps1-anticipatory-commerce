@@ -6,7 +6,8 @@ stand-in for tests. Part 2 is the commit policy.
 The agent is rewarded for committing early and punished hard for committing wrongly, so the
 default action is always "wait". A commit needs all of these:
 
-  1. the state is settled (no correction on its way, no number still growing);
+  1. the state is settled (no correction on its way, no number still growing), and no value
+     in it was guessed (a number with no cue, a spell-corrected word);
   2. the category is known, and for categories with sizes the size is known too, because until
      then no single product can match (a vocabulary-level fact, not a catalogue peek);
   3. the risk model says the chance of being wrong is below the break-even risk;
@@ -100,6 +101,12 @@ def break_even_risk(words_saved: int, config: Config = DEFAULT_CONFIG) -> float:
     return gain / (1.0 + gain + forfeited)
 
 
+def allowed(hits: List[Product], excluded) -> List[Product]:
+    """The hits that have none of the values the shopper ruled out ("not a t-shirt")."""
+    return [h for h in hits
+            if not any(str(h.get(slot, "")).lower() == str(value).lower() for slot, value in excluded)]
+
+
 def search_filters(snapshot: Snapshot, config: Config = DEFAULT_CONFIG) -> Dict[str, Any]:
     """The filters a search should use: every belief that is trusted enough."""
     floor = config.policy.min_search_confidence
@@ -114,6 +121,10 @@ def blocked_reason(snapshot: Snapshot, filters: Dict[str, Any], lexicon: Lexicon
         return f"not understood, so no early commit: {words}"
     if not snapshot.settled:
         return "unsettled: correction pending, number still growing or a cue awaiting its number"
+    if snapshot.guessed:
+        # A hard rule, not left to the risk model: in a calm state the learned model barely
+        # weighs confidence, so a weak guess could otherwise slip under the break-even risk.
+        return f"guessed, so no early commit: {', '.join(snapshot.guessed)}"
     category = filters.get("category")
     if category is None:
         return "category not known"
@@ -164,11 +175,12 @@ class CommitPolicy:
         if searched:
             self.last_hits = catalog.find(filters, "", self.config.policy.candidate_k)
             self.last_filters = dict(filters)
-        count = len(self.last_hits)
+        hits = allowed(self.last_hits, snapshot.excluded)
+        count = len(hits)
         if count != 1:
             return Decision("wait", f"{count} products match", risk=risk, searched=searched,
                             n_candidates=count)
-        product_id = self.last_hits[0]["product_id"]
+        product_id = hits[0]["product_id"]
         self.committed = product_id
         return Decision("commit", "one product matches and the risk is low", product_id, risk,
                         searched, count)

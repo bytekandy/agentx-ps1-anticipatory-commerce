@@ -96,8 +96,10 @@ class SearchFilterTest(PolicyTestCase):
                                                 "max_price": 2000})
 
     def test_leaves_out_weak_beliefs(self):
-        snap = self.snapshot("black sneakers 9")           # a bare number is only a guess
+        snap = self.snapshot("black cap 9")         # a bare number no cap size answers to
         self.assertNotIn("size", search_filters(snap))
+        snap = self.snapshot("black sneakers size 9 10")   # a stray number after a stated size
+        self.assertEqual(search_filters(snap)["size"], "9")
 
 
 class GateTest(PolicyTestCase):
@@ -120,6 +122,14 @@ class GateTest(PolicyTestCase):
     def test_unsettled_blocks(self):
         self.assertIn("unsettled", self.reason("black sneakers size 9 oops"))
         self.assertIn("unsettled", self.reason("black sneakers size 9 under two thousand"))
+
+    def test_a_guessed_value_blocks(self):
+        # a number with no cue beside it, and a spell-corrected brand
+        self.assertIn("guessed", self.reason("black Pacevo sneakers size 9 but grey 8 please"))
+        self.assertIn("guessed", self.reason("black Pacvo sneakers size 9 please"))
+
+    def test_a_restated_number_is_no_guess(self):
+        self.assertIsNone(self.reason("black sneakers size eight, actually nine, please"))
 
 
 class StepTest(PolicyTestCase):

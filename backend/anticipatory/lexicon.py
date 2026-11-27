@@ -25,13 +25,13 @@ Safety rules
 import csv
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .config import DEFAULT_CONFIG, SpellingConfig, VocabConfig
 from .spelling import SpellingCorrector
-from .tokens import Token
+from .tokens import Token, english_words
 
 DEFAULT_CATALOGUE_PATH = Path(__file__).resolve().parents[1] / "catalogue.csv"
 
@@ -44,7 +44,7 @@ CATEGORY_SYNONYMS = {
     "sneakers": ["casual shoes", "casual sneakers"],
     "sandals": ["slides", "floaters",
                 # not seen in dev:
-                "flip flops", "chappals"],
+                "flip flops", "chappals", "sliders", "slippers", "chappal"],
     "t-shirts": ["tshirt", "tee", "t shirt",
                  # not seen in dev:
                  "tee shirt"],
@@ -58,6 +58,7 @@ CATEGORY_SYNONYMS = {
     "backpacks": ["bag pack", "rucksack", "bag",
                   # not seen in dev:
                   "back pack", "bagpack"],
+    # A sport qualifier before a Hindi or English shoe word: see FOOTWEAR_QUALIFIED below.
     "headphones": ["headset",
                    # not seen in dev:
                    "earphones", "earbuds", "head phones"],
@@ -96,6 +97,55 @@ COLOUR_SYNONYMS = {
     "yellow": ["peela", "pila", "peeli", "pili"],
     "silver": ["chandi"],
 }
+
+# Shade names mapped to their colour family, for families the shop sells under one name. Only
+# shades that are not ordinary words stand alone; the others are in COLOUR_WORD_SHADES.
+# Off-white, ivory and khaki are left out: they sit between two catalogue colours.
+SHADE_SYNONYMS = {
+    "grey": ["charcoal", "slate", "graphite", "gunmetal", "slate grey", "charcoal grey"],
+    "maroon": ["burgundy", "oxblood", "wine red"],
+    "red": ["crimson", "scarlet", "cherry red", "blood red"],
+    "yellow": ["mustard", "mustard yellow", "lemon yellow"],
+    "green": ["emerald", "emerald green", "forest green", "bottle green"],
+    "brown": ["chocolate brown", "coffee brown"],
+    "beige": ["ecru", "sand beige"],
+    "tan": ["camel brown"],
+    # Colour abbreviations typed in a hurry ("blk Pacevo sneakrs").
+    "black": ["blk"],
+    "white": ["wht"],
+}
+
+# Shades that are also ordinary words ("wine", "coffee", "ash") name a colour only together
+# with a colour word: "wine coloured kurta", "ash colour hoodie", never "a wine glass".
+COLOUR_WORD_SHADES = {
+    "maroon": ["wine", "cherry"],
+    "grey": ["ash", "smoke", "steel"],
+    "brown": ["coffee", "chocolate"],
+    "beige": ["cream", "sand"],
+    "tan": ["camel"],
+}
+_COLOUR_WORDS = ("colour", "coloured", "color", "colored", "rang")
+
+# Hindi colour adjectives agree with their noun: neela, neeli, neele. Every ending of every stem
+# is generated, except forms that are common English words ("nile", "pile", "hare").
+HINDI_COLOUR_STEMS = {
+    "black": ["kaal", "kal"], "blue": ["neel", "nil"], "yellow": ["peel", "pil"],
+    "green": ["har"], "brown": ["bhur", "bhoor"],
+}
+HINDI_ENDINGS = ("a", "i", "e")
+HINDI_FORM_MAX_ENGLISH_RANK = 20_000            # a form this common in English is left out
+
+# A sport word before a shoe word, in English or Hindi, is a running shoe: "running wale joote",
+# "sports joota", "jogging shoe". The qualifier is required: plain "joote" names no category.
+FOOTWEAR_QUALIFIERS = ("running", "sports", "sport", "jogging")
+FOOTWEAR_LINKS = ("", "wale", "wala", "waale", "vale")
+FOOTWEAR_NOUNS = ("joote", "joota", "jute", "juta", "shoes", "shoe")
+
+# Hindi size words count only beside a size cue ("chhota size", "size bada"): alone, "chhota"
+# and "bada" just mean small and big.
+HINDI_SIZE_WORDS = {"S": ["chhota", "chota", "chhoti", "choti"],
+                    "L": ["bada", "badi", "bade", "bara"]}
+HINDI_SIZE_CUES = ("size", "saiz")
 
 SIZE_SYNONYMS = {
     "S": ["small"],
@@ -202,6 +252,30 @@ def _spellings(parts: Sequence[str]) -> Set[Tuple[str, ...]]:
     return keys
 
 
+def _generated_phrases() -> List[Tuple[str, str, str]]:
+    """(phrase, slot, value) made by rule from the tables above, rather than listed one by one."""
+    out: List[Tuple[str, str, str]] = []
+    for value, phrases in SHADE_SYNONYMS.items():
+        out += [(p, "colour", value) for p in phrases]
+    for value, shades in COLOUR_WORD_SHADES.items():
+        out += [(f"{shade} {word}", "colour", value) for shade in shades for word in _COLOUR_WORDS]
+    english = english_words()
+    for value, stems in HINDI_COLOUR_STEMS.items():
+        for form in (stem + ending for stem in stems for ending in HINDI_ENDINGS):
+            rank = english.rank(form)
+            if rank is None or rank > HINDI_FORM_MAX_ENGLISH_RANK:
+                out.append((form, "colour", value))
+    for q in FOOTWEAR_QUALIFIERS:
+        for link in FOOTWEAR_LINKS:
+            for noun in FOOTWEAR_NOUNS:
+                out.append((" ".join(w for w in (q, link, noun) if w), "category", "running shoes"))
+    for value, words in HINDI_SIZE_WORDS.items():
+        for word in words:
+            for cue in HINDI_SIZE_CUES:
+                out += [(f"{word} {cue}", "size", value), (f"{cue} {word}", "size", value)]
+    return out
+
+
 # ----------------------------------------------------------------------------- the lexicon
 
 class Lexicon:
@@ -242,9 +316,14 @@ class Lexicon:
         weights = dict(self.word_weights)
         for w in cue_words:
             weights.setdefault(w, CUE_WORD_WEIGHT)
+        spelling = spelling or DEFAULT_CONFIG.spelling
         self.corrector = SpellingCorrector(
-            weights, self.catalogue_words - frozenset(weights),
-            spelling or DEFAULT_CONFIG.spelling)
+            weights, self.catalogue_words - frozenset(weights), spelling)
+        # Brand mode (see SpellingConfig): brand names only, no real-word guard, one more edit.
+        self.brand_corrector = SpellingCorrector(
+            {w: 1.0 for b in self.brands for w in b.lower().split()}, (),
+            replace(spelling, real_word_ratio=0.0,
+                    max_cost_long=spelling.max_cost_long + spelling.brand_extra_cost))
         self._max_phrase_len = max(len(key) for key in self._table)
         self._confidence = {
             "exact": self.config.confidence_exact,
@@ -328,6 +407,10 @@ class Lexicon:
             if value in self.letter_sizes:
                 for phrase in phrases:
                     collect(phrase, "size", value, "synonym")
+        for phrase, slot, value in _generated_phrases():
+            known = {"category": self.categories, "colour": self.colours, "size": self.letter_sizes}
+            if value in known[slot]:
+                collect(phrase, slot, value, "synonym")
 
         resolved: Set[Tuple[str, ...]] = set()
         for rank in sorted(set(_PRIORITY.values())):

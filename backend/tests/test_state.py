@@ -48,8 +48,13 @@ class ReadingTest(StateTestCase):
         self.assertEqual(self.snap("black watch above 2000").filters["min_price"], 2000)
 
     def test_weak_guesses_are_left_out(self):
-        self.assertIsNone(self.snap("black sandals 9").filters["size"])
         self.assertIsNone(self.snap("need it in 10 days").filters["size"])
+        self.assertIsNone(self.snap("black 9").filters["size"])          # no category to judge it
+
+    def test_a_number_that_fits_the_category_is_a_guess(self):
+        s = self.snap("black sandals 9")
+        self.assertEqual(s.filters["size"], "9")       # used for the final answer
+        self.assertEqual(s.guessed, ("size: 9",))      # but never for an early commit
 
     def test_quiet_words_and_clause_end(self):
         s = self.snap("black sandals, please do hurry")
@@ -143,9 +148,10 @@ class RestatementTest(StateTestCase):
         s = self.snap("olive size eight slides 6")
         self.assertEqual(s.filters["size"], "8")
 
-    def test_a_marker_alone_does_not_turn_a_bare_number_into_a_new_size(self):
+    def test_a_marker_alone_does_not_make_a_bare_number_a_restatement(self):
         s = self.snap("olive slides actually 6")        # no earlier size to restate
-        self.assertIsNone(s.filters["size"])
+        self.assertEqual(s.filters["size"], "6")        # it fits slides, so it is a guess
+        self.assertEqual(s.guessed, ("size: 6",))
 
 
 class PendingCorrectionTest(StateTestCase):
@@ -213,6 +219,21 @@ class CuePendingTest(StateTestCase):
 
     def test_plain_words_are_not_pending(self):
         self.assertFalse(self.pending("black cap please"))
+
+
+class ConnectorPendingTest(CuePendingTest):
+    def test_a_connector_announces_a_value(self):
+        for text in ("grey Pacevo sneakers size 8 in", "Loomsy shirt XXL, and",
+                     "Loomsy shirt XXL, and I'd", "the same but", "white cap aur"):
+            with self.subTest(text=text):
+                self.assertTrue(self.pending(text))
+                self.assertFalse(self.snap(text, final=False).settled)
+
+    def test_the_value_or_a_pause_or_two_words_close_it(self):
+        for text in ("Loomsy shirt in white", "Loomsy shirt XXL, and, hmm",
+                     "Loomsy shirt XXL, and thanks a lot", "black cap and."):
+            with self.subTest(text=text):
+                self.assertFalse(self.pending(text))
         self.assertFalse(self.pending(""))
 
 
@@ -365,6 +386,67 @@ class CommaInsidePhraseTest(unittest.TestCase):
 
     def test_a_comma_between_two_values_still_separates_them(self):
         self.assertEqual(filters("shirt, size M, in black")["colour"], "black")
+
+
+class BareNumberTest(StateTestCase):
+    def test_a_number_that_fits_the_category_is_used(self):
+        for text, size in (("give me 10 in the white Loomsy sneakers", "10"),
+                           ("I prefer loose so 34, blue Northweft jeans", "34"),
+                           ("I normally wear a 9 ... Pacevo sneakers", "9")):
+            with self.subTest(text=text):
+                s = self.snap(text)
+                self.assertEqual(s.filters["size"], size)
+                self.assertTrue(s.guessed)              # and never commits early on it
+
+    def test_a_later_number_replaces_an_earlier_one(self):
+        s = self.snap("black Pacevo sneakers in size 9, I want the same but grey in 8")
+        self.assertEqual((s.filters["colour"], s.filters["size"]), ("grey", "8"))
+
+    def test_a_number_that_does_not_fit_or_counts_something_else_is_not(self):
+        for text in ("a 34 for my sneakers", "my 8 year old needs sneakers",
+                     "2 pairs of sneakers", "Wavlo watch 9"):
+            with self.subTest(text=text):
+                self.assertIsNone(self.snap(text).filters["size"])
+
+    def test_a_letter_size_needs_a_category_sold_in_letters(self):
+        self.assertIsNone(self.snap("Loomsy runs small, white sneakers").filters["size"])
+        self.assertEqual(self.snap("small white Loomsy t-shirt").filters["size"], "S")
+
+
+class CancelAndNegationTest(StateTestCase):
+    def test_doesnt_matter_and_any_clear_the_slot(self):
+        for text, slot in (("grey Loomsy hoodie size M, colour doesnt really matter, under 1000", "colour"),
+                           ("Sonquil white headphones, actually brand doesn't matter", "brand"),
+                           ("Tanaro kurta in green, size M, any brand honestly", "brand")):
+            with self.subTest(text=text):
+                self.assertIsNone(self.snap(text).filters[slot])
+
+    def test_a_value_after_the_cancel_still_counts(self):
+        s = self.snap("colour doesn't matter, but black sneakers size 9")
+        self.assertEqual(s.filters["colour"], "black")
+
+    def test_a_later_slot_word_waits_for_what_follows(self):
+        self.assertTrue(self.snap("grey Loomsy hoodie size M, colour", final=False).cue_pending)
+        for text in ("Loomsy XXL size", "black colour Loomsy shirt",
+                     "Mehrin dress size XL. sorry, I meant M size"):
+            with self.subTest(text=text):
+                self.assertFalse(self.snap(text, final=False).cue_pending)
+
+    def test_a_negated_value_is_excluded_not_asked_for(self):
+        s = self.snap("a navy Tanaro shirt, not a t-shirt, size XL")
+        self.assertEqual(s.filters["category"], "shirts")
+        self.assertEqual(s.excluded, (("category", "t-shirts"),))
+        self.assertEqual(self.snap("sneakers anything but Pacevo").excluded, (("brand", "Pacevo"),))
+
+    def test_corrections_and_price_cues_are_not_negations(self):
+        self.assertEqual(self.snap("black, no, white sneakers size 9").filters["colour"], "white")
+        s = self.snap("black cap not more than 1500")
+        self.assertEqual((s.filters["max_price"], s.excluded), (1500, ()))
+
+    def test_nothing_above_is_a_budget(self):
+        self.assertEqual(self.snap("gold watch, nothing above 2000").filters["max_price"], 2000)
+        self.assertEqual(self.snap("gold watch above 2000").slots["min_price"].value, 2000)
+        self.assertFalse(self.snap("white headphones nothing", final=False).cue_pending)
 
 
 class CueTypoTest(unittest.TestCase):

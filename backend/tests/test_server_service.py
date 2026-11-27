@@ -1,10 +1,18 @@
 import json
+import re
 import threading
 import unittest
 from pathlib import Path
 
 from server.events import ServiceError
 from server.service import DATASETS, Limits, StreamService
+
+
+def committed_dev_score() -> float:
+    """The dev score in outputs/report.md, which scripts/report.py writes with the results."""
+    report = (Path(__file__).resolve().parents[1] / "outputs" / "report.md").read_text(encoding="utf-8")
+    return float(re.search(r"\| \*\*score\*\* \| \*\*([\d.]+)\*\*", report).group(1))
+
 
 BACKEND = Path(__file__).resolve().parents[1]
 WORDS = "beige Loomsy sneakers size 10 under 3000 please".split()
@@ -231,7 +239,7 @@ class ExamplesAndResultsTest(ServiceTestCase):
 
     def test_results_match_the_committed_report(self):
         result = self.service.results("dev")
-        self.assertAlmostEqual(result["summary"]["score"], 43.5, delta=0.05)
+        self.assertAlmostEqual(result["summary"]["score"], committed_dev_score(), delta=0.05)
         self.assertEqual(result["summary"]["wrong_commits"], 0)
         self.assertAlmostEqual(result["baseline"]["score"], 20.0, delta=0.05)
         self.assertEqual(len(result["requests"]), 300)

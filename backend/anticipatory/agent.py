@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import Lexicon
-from .policy import CatalogPort, CommitPolicy, search_filters
+from .policy import CatalogPort, CommitPolicy, allowed, search_filters
 from .risk import HeuristicRisk, RiskModel
 from .state import FilterState
 
@@ -100,16 +100,22 @@ class AnticipatoryAgent:
         policy = self.policy
 
         # The commit (or the latest search) already checked these exact filters: no new search.
-        if filters == policy.last_filters and len(policy.last_hits) == 1:
-            return policy.last_hits[0]["product_id"]
+        last = allowed(policy.last_hits, snapshot.excluded)
+        if filters == policy.last_filters and len(last) == 1:
+            return last[0]["product_id"]
 
         query = " ".join(self.words)
         k = self.config.policy.final_k
+        # Every value the shopper stated fits the target, so when nothing matches, something was
+        # misread: most likely the value read least surely. Drop the weakest first; between equal
+        # confidences keep the kit's order.
+        order = sorted((slot for slot in filters),
+                       key=lambda s: (snapshot.slots[s].confidence, _RELAX_ORDER.index(s)))
         while True:
-            hits = self.catalog.find(filters, query, k)
+            hits = allowed(self.catalog.find(filters, query, k), snapshot.excluded)
             if hits:
                 return hits[0]["product_id"]
-            droppable = next((slot for slot in _RELAX_ORDER if slot in filters), None)
-            if droppable is None:
+            if not order:
                 return None
+            droppable = order.pop(0)
             filters = {slot: v for slot, v in filters.items() if slot != droppable}

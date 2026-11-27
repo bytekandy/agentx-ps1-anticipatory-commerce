@@ -39,6 +39,27 @@ from .tokens import Token, make_tokens
 MARKER_PHRASES = frozenset({("make", "that"), ("make", "it")})
 # A word that, said last, almost always opens a two-word marker: wait one word to see.
 MARKER_STARTERS = frozenset({"make"})
+# A connector said last announces another value ("...grey in", "...XXL, and", "same but"):
+# wait one word to see it. A connector that ends a clause ("in." "and,") announces nothing.
+# Words that name a slot. Said with "doesn't matter" after them, or "any" / "koi bhi" before
+# them, they clear the slot ("colour doesn't really matter", "any brand"). Said after the
+# slot's value, they announce something about it, so the state waits for a few words.
+SLOT_WORDS = {"colour": "colour", "color": "colour", "colours": "colour", "colors": "colour",
+              "rang": "colour", "brand": "brand", "company": "brand", "size": "size",
+              "budget": "max_price", "price": "max_price"}
+_NOT_WORDS = frozenset({"doesn't", "doesnt", "don't", "dont", "not", "no", "never"})
+_MATTER_WORDS = frozenset({"matter", "matters", "important"})
+SLOT_WORD_WINDOW = 4
+# Words that exclude the value after them ("not a t-shirt", "except black"). "no" and "nahi"
+# are correction markers ("black, no, white"), so they are left out on purpose.
+NEGATION_WORDS = frozenset({"not", "except", "excluding", "without"})
+NEGATION_PHRASES = frozenset({("anything", "but"), ("don't", "want"), ("dont", "want")})
+_ARTICLES = frozenset({"a", "an", "the", "any"})
+
+# Words that set a new value against an earlier one ("the same but grey in 8", "so 34").
+CONTRAST_WORDS = frozenset({"but", "so", "instead", "same", "rather", "now", "lekin", "par"})
+CONNECTORS = frozenset({"in", "and", "also", "but", "plus", "or", "with", "of", "aur", "mein",
+                        "same"})
 
 # Slots in the order the evaluator expects; `min_price` is added only when it is present.
 REPORTED_SLOTS = ("category", "colour", "size", "brand", "max_price")
@@ -85,6 +106,12 @@ class Snapshot:
     cue_pending: bool = False               # the words end on a cue awaiting its number, or on "make"
     unresolved: Tuple[Unresolved, ...] = () # constraints stated that nothing in the shop answers to
     unsettled_factor: float = 0.5
+    # Values the reader had to guess: a number with no cue beside it ("in 8", "so 34") or a
+    # spell-corrected word. They may serve the final answer, but never an early commit.
+    guessed: Tuple[str, ...] = ()
+    # Values the shopper ruled out ("not a t-shirt"): (slot, value). A search cannot filter on
+    # "not", so the agent drops such products from what a search returns.
+    excluded: Tuple[Tuple[str, object], ...] = ()
 
     @property
     def settled(self) -> bool:
@@ -149,11 +176,28 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
     events: Dict[str, List[_Event]] = {}
     pending: List[str] = []
     heard: List[SlotMention] = []                       # mentions that count (not weak guesses)
+    guessed: List[str] = []
+    excluded: List[Tuple[str, object]] = []
+    kept: List[SlotMention] = []
+    for m in mentions:
+        if _negated(tokens, m):
+            excluded.append((m.slot, m.value))          # ruled out, not asked for
+        else:
+            kept.append(m)
+    mentions = kept
+    said_category = _said_category(mentions, cfg)
     for m in mentions:
         marked = _marker_before(markers, m.start, cfg.correction_window)
         confidence = m.confidence
-        if m.via == "bare" and marked and m.slot in events:
+        restated = m.via == "bare" and marked and m.slot in events
+        if restated:
             confidence = max(confidence, cfg.restate_confidence)       # a restatement
+        elif (m.slot == "size" and m.via == "bare") or m.kind == "fuzzy":
+            guessed.append(f"{m.slot}: {m.value}")
+            if m.slot == "size" and said_category and lexicon.category_has_sizes(said_category) \
+                    and size_fits_category(str(m.value), said_category, lexicon) \
+                    and _may_replace(tokens, events.get("size", ()), m):
+                confidence = max(confidence, cfg.bare_size_fit_confidence)
         if confidence < cfg.min_belief_confidence:
             continue                                                   # a weak guess
         heard.append(m)
@@ -187,6 +231,10 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         if belief:
             beliefs[slot] = belief
 
+    for slot, at in _find_cancels(tokens):              # "colour doesn't matter": forget it
+        if slot in beliefs and beliefs[slot].end <= at:
+            del beliefs[slot]
+
     words = len(tokens)
     last_end = max((m.end for m in heard), default=0)
     return Snapshot(
@@ -195,11 +243,15 @@ def build_snapshot(tokens: Sequence[Token], lexicon: Lexicon, config: Config = D
         markers=tuple(markers),
         pending_slots=tuple(pending),
         correction_pending=_correction_pending(markers, heard, words, cfg),
-        cue_pending=_something_follows(tokens, mentions),
+        cue_pending=(_something_follows(tokens, mentions)
+                     or _connector_pending(tokens, mentions, cfg.connector_window)
+                     or _slot_word_pending(tokens, mentions)),
         unresolved=tuple(sorted(unresolved, key=lambda u: u.start)),
         at_clause_end=bool(tokens) and tokens[-1].clause_end,
         quiet_words=words - last_end,
         unsettled_factor=cfg.unsettled_factor,
+        guessed=tuple(guessed),
+        excluded=tuple(excluded),
     )
 
 
@@ -218,6 +270,72 @@ def _marker_before(markers: Sequence[Marker], start: int, window: int) -> Option
         if marker.end <= start and start - marker.end <= window:
             best = marker
     return best
+
+
+def _negated(tokens: Sequence[Token], m: SlotMention) -> bool:
+    """A negation word just before the mention ("not a t-shirt", "anything but Pacevo"), with
+    no pause between. Prices are never negated: "not more than 1500" is a cue."""
+    if m.slot not in ("category", "colour", "brand", "size"):
+        return False
+    j = m.start - 1
+    while j >= 0 and tokens[j].text in _ARTICLES and not tokens[j].clause_end:
+        j -= 1
+    if j < 0 or tokens[j].clause_end:
+        return False
+    pair = tuple(t.text for t in tokens[max(0, j - 1):j + 1])
+    return tokens[j].text in NEGATION_WORDS or pair in NEGATION_PHRASES
+
+
+def _find_cancels(tokens: Sequence[Token]) -> List[Tuple[str, int]]:
+    """(slot, token index) for each slot the shopper says they do not care about."""
+    out = []
+    for i, token in enumerate(tokens):
+        slot = SLOT_WORDS.get(token.text)
+        if not slot:
+            continue
+        after = [t.text for t in tokens[i + 1:i + 1 + SLOT_WORD_WINDOW]]
+        before = [t.text for t in tokens[max(0, i - 2):i]]
+        matter = next((k for k, w in enumerate(after) if w in _MATTER_WORDS), None)
+        if matter is not None and any(w in _NOT_WORDS for w in after[:matter]):
+            out.append((slot, i))                       # "colour doesn't really matter"
+        elif before[-1:] == ["any"] or before == ["koi", "bhi"]:
+            out.append((slot, i))                       # "any brand", "koi bhi rang"
+    return out
+
+
+def _slot_word_pending(tokens: Sequence[Token], mentions: Sequence[SlotMention]) -> bool:
+    """A slot word was said after that slot's value, within the last few words, and nothing
+    has followed it yet: "...size M, colour" may go on "doesn't matter"."""
+    for c in range(len(tokens) - 1, max(-1, len(tokens) - 1 - SLOT_WORD_WINDOW), -1):
+        if c < len(tokens) - 1 and tokens[c].clause_end:
+            return False                                  # a pause since the slot word
+        slot = SLOT_WORDS.get(tokens[c].text)
+        if slot:
+            # "M size" and "black colour" just name the value: only a slot word that comes
+            # later than the slot's latest value counts.
+            ends = [m.end for m in mentions if m.slot == slot and m.end <= c]
+            return bool(ends) and max(ends) < c and not any(m.start > c for m in mentions)
+    return False
+
+
+def _said_category(mentions: Sequence[SlotMention], cfg) -> Optional[str]:
+    """The category the words name, last one winning, wherever it comes in the request: a
+    number heard before it ("I wear a 9 ... sneakers") is judged against it."""
+    said = [m.value for m in mentions if m.slot == "category" and m.complete
+            and m.confidence >= cfg.min_belief_confidence]
+    return said[-1] if said else None
+
+
+def _may_replace(tokens: Sequence[Token], earlier: Sequence["_Event"], m: SlotMention) -> bool:
+    """May a cue-less number replace the size already heard? Only after a contrast word
+    ("in size 9, I want the same but grey in 8", "a 9 but ... so 10"). Without one, a stray
+    number ("size eight slides 6") must not overturn a size that was clearly stated."""
+    if not earlier:
+        return True
+    last = earlier[-1].mention
+    if last.via == "bare":
+        return True                                     # two guesses: the later one wins
+    return any(t.text in CONTRAST_WORDS for t in tokens[last.end:m.start])
 
 
 def _late_before(tokens: Sequence[Token], start: int, window: int) -> bool:
@@ -246,6 +364,7 @@ def _fold(slot: str, events: Sequence[_Event], cfg) -> Optional[SlotBelief]:
 def _something_follows(tokens: Sequence[Token], mentions: Sequence[SlotMention] = ()) -> bool:
     """The words end on a word that announces more: a size or price cue awaiting its number,
     or "make" (which may be about to become "make that"). "make sure" costs one word of wait.
+    Connectors ("in", "and", "but") are `_connector_pending`.
 
     A cue that closes a size already heard ("M size", "XXL size", "size 8 UK") announces
     nothing: no number is coming.
@@ -254,6 +373,17 @@ def _something_follows(tokens: Sequence[Token], mentions: Sequence[SlotMention] 
             m.slot == "size" and m.end == len(tokens) - 1 for m in mentions):
         return bool(tokens[-1].text in MARKER_STARTERS)
     return cue_awaiting_number(tokens) or (bool(tokens) and tokens[-1].text in MARKER_STARTERS)
+
+
+def _connector_pending(tokens: Sequence[Token], mentions: Sequence[SlotMention], window: int) -> bool:
+    """A connector was said in the last `window` words, and neither a value nor a pause has
+    followed it yet."""
+    for c in range(len(tokens) - 1, max(-1, len(tokens) - 1 - window), -1):
+        if tokens[c].clause_end:
+            return False                                  # a pause after the connector: closed
+        if tokens[c].text in CONNECTORS:
+            return not any(m.start > c for m in mentions)
+    return False
 
 
 def _correction_pending(markers: Sequence[Marker], heard: Sequence[SlotMention],

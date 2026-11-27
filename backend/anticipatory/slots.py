@@ -27,7 +27,7 @@ from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 from .config import DEFAULT_CONFIG, Config
 from .lexicon import PRICE_CUES, SIZE_CUES, Lexicon
 from .numbers import NumberReading, read_number
-from .tokens import Token
+from .tokens import Token, english_words
 
 SLOTS = ("category", "colour", "brand", "size", "max_price", "min_price")
 
@@ -41,8 +41,16 @@ _MIN_PRICE_CUES = frozenset({
     ("more", "than"), ("starting", "at"), ("starting", "from"),
 })
 
+# A lower-bound cue after one of these is an upper bound: "nothing above 2000", "not over 1500".
+# (Kept out of the cue tables, or "nothing" alone would announce a number: "nothing too flashy".)
+_NEGATED_MIN = frozenset({"nothing", "not", "never"})
+
 # Cues that follow the number: "1500 tak", "1500 or less". The cues that precede a number
 # ("under", "budget") are deliberately absent, or "size 9 under 1500" would make 9 a price.
+# A number followed by one of these counts something else: "my 8 year old", "2 pairs", "10th".
+NOT_A_SIZE_AFTER = frozenset({"year", "years", "yr", "yrs", "old", "pair", "pairs", "pcs", "pieces",
+                              "th", "st", "nd", "rd", "days", "day", "baje", "saal", "kg", "percent"})
+
 _POSTFIX_ONLY = frozenset({("tak",), ("se", "kam"), ("ke", "andar")})   # never a cue BEFORE a number
 _POSTFIX_PRICE_CUES = frozenset({
     ("tak",), ("se", "kam"), ("ke", "andar"), ("rupees",), ("rupee",), ("rs",), ("inr",),
@@ -85,6 +93,30 @@ def _drop_possessives(tokens: Sequence[Token], lexicon: Lexicon) -> List[Token]:
     return out
 
 
+def _correct_brands(tokens: List[Token], corrected: FrozenSet[int],
+                    lexicon: Lexicon) -> Tuple[List[Token], FrozenSet[int]]:
+    """Brand mode: a capitalised word the lexicon cannot place, long enough and not a common
+    English word, may be a misspelt brand ("Northwest beige shirt" for Northweft)."""
+    cfg = lexicon.corrector.cfg
+    if not cfg.brand_mode:
+        return tokens, corrected
+    english = english_words()
+    out, changed = list(tokens), set(corrected)
+    for i, token in enumerate(tokens):
+        text = token.text
+        if (i in corrected or not token.raw[:1].isupper() or len(text) < cfg.brand_min_length
+                or text in lexicon.known_words):
+            continue
+        rank = english.rank(text)
+        if rank is not None and rank < cfg.brand_min_english_rank:
+            continue
+        fixed = lexicon.brand_corrector.correct(text)
+        if fixed:
+            out[i] = replace(token, text=fixed)
+            changed.add(i)
+    return out, frozenset(changed)
+
+
 def extract_mentions(tokens: Sequence[Token], lexicon: Lexicon,
                      config: Config = DEFAULT_CONFIG, final: bool = False) -> List[SlotMention]:
     """All slot mentions in the words so far; see `read_words` for the full reading."""
@@ -104,6 +136,7 @@ def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAU
     mentions: List[SlotMention] = []
     tokens = _drop_possessives(tokens, lexicon)
     tokens, corrected = lexicon.corrector.correct_tokens(tokens)
+    tokens, corrected = _correct_brands(tokens, corrected, lexicon)
     corrected_tokens = tuple(tokens)
     i = 0
     while i < len(tokens):
@@ -183,7 +216,9 @@ def size_fits_category(size: str, category, lexicon: Lexicon) -> bool:
         return False
     if size.isdigit():
         return lexicon.size_from_number(int(size), category) is not None
-    return True
+    # A letter size needs a category sold in letter sizes: "runs small" says nothing about a
+    # sneaker's size.
+    return size in lexicon.sizes_for_category(category)
 
 
 # ----------------------------------------------------------------------------- numbers
@@ -223,7 +258,7 @@ def _number_mention(tokens, start, reading: NumberReading, lexicon: Lexicon,
         bare = (config.slots.confidence_price_bare_digits if reading.form != "words"
                 else config.slots.confidence_price_bare_words)
         return _price("max_price", start, end, reading, bare, "bare", config)
-    if size:
+    if size and not (end < len(tokens) and tokens[end].text in NOT_A_SIZE_AFTER):
         return _size(start, end, reading, size, config.slots.confidence_size_bare_number, "bare")
     return None
 
@@ -299,6 +334,10 @@ def _cue_before(tokens, start) -> Optional[Tuple[str, Optional[str]]]:
         if j + 1 >= n and tuple(t.text for t in tokens[j + 1 - n:j + 1]) == cue \
                 and (best is None or n > len(best[0])):
             best = (cue, slot)
+    if best and best[1] == "min_price":
+        before = j - len(best[0])
+        if before >= 0 and tokens[before].text in _NEGATED_MIN and not tokens[before].clause_end:
+            return "price", "max_price"             # "nothing above 2000" is a budget
     return ("price", best[1]) if best else None
 
 

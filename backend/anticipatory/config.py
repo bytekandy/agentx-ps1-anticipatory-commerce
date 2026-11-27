@@ -60,6 +60,11 @@ class StateConfig:
     # actually six"), is read as a restatement and trusted this much.
     restate_confidence: float = 0.85
 
+    # A number with no cue that is a real size of the request's category ("give me 10 in the
+    # white sneakers", "so 34, blue jeans"): above the belief floor, so the final answer uses it,
+    # while `Snapshot.guessed` keeps it from ever making an early commit.
+    bare_size_fit_confidence: float = 0.65
+
     # A new value for a slot that already had one, with no marker to explain it, still wins
     # (the last word is usually right) but is trusted less.
     unmarked_revision_confidence: float = 0.60
@@ -67,6 +72,11 @@ class StateConfig:
     # An afterthought word ("and", "also", "oh", "aur") this close before a mention marks the
     # mention as a late constraint.
     late_window: int = 3
+
+    # A connector ("in", "and", "but") announces another value. Until a value follows, a pause
+    # closes the clause, or this many words pass, the state is not settled ("...XXL, and I'd
+    # rather it be beige": the agent must not commit on "and" or "I'd").
+    connector_window: int = 2
 
     # Reading the whole request again after every word is cheap for real requests (6 to 25
     # words) but grows with the square of the length. Past this many words the state stops
@@ -153,6 +163,14 @@ class SpellingConfig:
 
     channel_weight: float = 2.0       # how strongly the channel outweighs the word prior
     min_margin: float = 0.5           # the best candidate must beat the runner-up by this
+
+    # Brand mode: a capitalised word nothing explains is compared with the brand names alone,
+    # without the real-word guard ("Northwest" for Northweft) and with one more edit allowed for
+    # long words ("Zentrale" for Zentrail). Its mention is fuzzy, so never an early commit.
+    brand_mode: bool = True
+    brand_min_length: int = 6
+    brand_extra_cost: float = 1.0
+    brand_min_english_rank: int = 2000   # "Strong", "Looking" are words, never misspelt brands
 
 
 @dataclass(frozen=True)

@@ -99,6 +99,32 @@ class AgentFlowTest(AgentTestCase):
         _, final, _, _ = self.run_request("black watch size 9 under 10 thousand rupees please")
         self.assertIsNotNone(final)
 
+    def test_relaxing_drops_the_least_sure_value_first(self):
+        # The unmarked second brand is read at 0.6 and the budget at 0.95: with both, nothing
+        # matches. Dropping the brand (not the budget, as the fixed order did) keeps the Kudova.
+        catalog = InMemoryCatalog([
+            {"product_id": "P1", "title": "Pacevo Court Sneakers, Black", "brand": "Pacevo",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "2500", "description": ""},
+            {"product_id": "P3", "title": "Kudova Flex Sneakers, Black", "brand": "Kudova",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "1800", "description": ""}])
+        agent = AnticipatoryAgent(catalog, lexicon=self.lex)
+        agent.start("t")
+        for word in "black Kudova sneakers size 9 under 2000 Pacevo".split():
+            agent.observe(word)
+        self.assertEqual(agent.finish(), "P3")
+
+    def test_a_ruled_out_value_is_never_the_answer(self):
+        catalog = InMemoryCatalog([
+            {"product_id": "P1", "title": "Pacevo Court Sneakers, Black", "brand": "Pacevo",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "1500", "description": ""},
+            {"product_id": "P3", "title": "Kudova Flex Sneakers, Black", "brand": "Kudova",
+             "category": "sneakers", "colour": "black", "size": "9", "price": "1800", "description": ""}])
+        agent = AnticipatoryAgent(catalog, lexicon=self.lex)
+        agent.start("t")
+        for word in "black sneakers size 9, anything but Pacevo".split():
+            agent.observe(word)
+        self.assertEqual(agent.finish(), "P3")      # the cheaper Pacevo comes first otherwise
+
     def test_empty_request(self):
         agent = AnticipatoryAgent(InMemoryCatalog(self.rows), lexicon=self.lex)
         agent.start("t")

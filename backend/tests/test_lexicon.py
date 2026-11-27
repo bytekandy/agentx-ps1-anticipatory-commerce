@@ -270,5 +270,53 @@ class DevCoverageTest(unittest.TestCase):
         self.assertEqual(stray, [], f"{len(stray)} requests with stray matches")
 
 
+class GeneratedPhrasesTest(unittest.TestCase):
+    """Shades, Hindi endings, sport-qualified shoe words and Hindi sizes, made by rule."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.lex = Lexicon(load_rows())
+
+    def meaning(self, text):
+        tokens = tokenize_text(text)
+        match = self.lex.lookup(tokens, 0)
+        return (match.slot, match.value) if match and match.length == len(tokens) else None
+
+    def test_shades_map_to_their_family(self):
+        for text, colour in (("charcoal", "grey"), ("burgundy", "maroon"), ("crimson", "red"),
+                             ("mustard", "yellow"), ("wine coloured", "maroon"),
+                             ("ash colour", "grey"), ("blk", "black")):
+            with self.subTest(text=text):
+                self.assertEqual(self.meaning(text), ("colour", colour))
+
+    def test_ordinary_words_need_a_colour_word(self):
+        for text in ("wine", "ash", "coffee", "cream"):
+            with self.subTest(text=text):
+                self.assertIsNone(self.meaning(text))
+
+    def test_every_hindi_ending_but_not_english_words(self):
+        for text, colour in (("neele", "blue"), ("kaale", "black"), ("peele", "yellow"),
+                             ("bhure", "brown"), ("neela", "blue")):
+            with self.subTest(text=text):
+                self.assertEqual(self.meaning(text), ("colour", colour))
+        for text in ("nile", "pile", "hare"):
+            with self.subTest(text=text):
+                self.assertIsNone(self.meaning(text))
+
+    def test_a_sport_word_makes_a_shoe_word_a_running_shoe(self):
+        for text in ("running wale joote", "sports joota", "jogging shoe"):
+            with self.subTest(text=text):
+                self.assertEqual(self.meaning(text), ("category", "running shoes"))
+        self.assertIsNone(self.meaning("joote"))
+
+    def test_hindi_sizes_only_beside_a_cue(self):
+        self.assertEqual(self.meaning("chhota size"), ("size", "S"))
+        self.assertEqual(self.meaning("size bada"), ("size", "L"))
+        self.assertIsNone(self.meaning("chhota"))
+
+    def test_no_generated_phrase_conflicts(self):
+        self.assertEqual(self.lex.conflicts, [])
+
+
 if __name__ == "__main__":
     unittest.main()
