@@ -5,15 +5,15 @@ happens outside it (`scripts/learn_lexicon.py`, or the server's feedback endpoin
 `data/learned_lexicon.json`. When that file is absent, a word the lexicon cannot place is simply
 dropped, exactly as before.
 
-Two kinds of evidence, both needing a word nothing else explains ("sliders"):
-  * a correction in the request: "sliders, I mean slippers" says sliders = slippers (category);
+Two kinds of evidence, both needing a word nothing else explains ("clogs"):
+  * a correction in the request: "clogs, I mean sandals" says clogs = sandals (category);
   * a confirmed answer: the shopper accepted a product, and exactly one of its category, colour
     or brand was never said in the request while exactly one unknown word was.
 A word is used only after `learned_min_count` agreeing observations and never once the evidence
 against it (an accepted product that disagrees) outweighs half of it. A learned phrase reads with
 the confidence of a corrected word, so the agent does not commit early on it lightly.
 
-File format: {"version": 1, "words": {"sliders": {"slot": "category", "value": "slippers",
+File format: {"version": 1, "words": {"clogs": {"slot": "category", "value": "sandals",
 "count": 3, "against": 0}}}
 """
 import json
@@ -98,7 +98,7 @@ def learn_from_request(words: Sequence[str], lexicon: Lexicon, store: LearnedSto
     covered = {i for m in reading.mentions for i in range(m.start, m.end)}
     unknown = unknown_words(tokens, lexicon, covered)
     seen = []
-    for marker in find_markers(tokens):                              # "sliders, I mean slippers"
+    for marker in find_markers(tokens):                              # "clogs, I mean sandals"
         before = [(i, w) for i, w in unknown if i == marker.start - 1]
         after = [m for m in reading.mentions if m.slot in _SLOTS
                  and 0 <= m.start - marker.end <= _MARKER_REACH]

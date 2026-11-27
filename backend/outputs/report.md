@@ -39,13 +39,13 @@ Measured on the dev set, on the machine that generated this file (timings vary a
 |  |  |
 |---|---|
 | language model calls per request | 0 (rules, a 22-weight logistic regression, a word list) |
-| per-word latency, mean / median / p95 / p99 / max | 0.094 / 0.070 / 0.258 / 0.516 / 9.563 ms |
-| CPU per request (the whole request, including searches) | 1.68 ms |
-| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 79 ms |
-| memory (process peak, with all agents and data loaded) | 42256 MB |
+| per-word latency, mean / median / p95 / p99 / max | 0.095 / 0.070 / 0.347 / 0.514 / 9.140 ms |
+| CPU per request (the whole request, including searches) | 1.71 ms |
+| cold start (fresh interpreter to a ready agent: imports, vocabulary, word list, model; median of 3) | 83 ms |
+| memory (process peak, with all agents and data loaded) | 42960 MB |
 | searches per request | 1.10 |
 | extrapolated: one million requests on one core | 0.5 CPU-hours, no per-request API cost |
-| size on disk: code / word list / risk model | 116 KB / 912 KB / 0.8 KB |
+| size on disk: code / word list / risk model | 120 KB / 912 KB / 0.8 KB |
 | dependencies | Python 3.14, standard library only |
 
 ## dev_extra
@@ -73,7 +73,7 @@ Baseline = the organisers' agent that waits for the whole request. Our floor, a 
 | unseen_synonym | 3 | 0.667 | 0 | 0.0% | 26.7 |
 | plain | 42 | 1.000 | 0 | 0.9% | 40.2 |
 
-Filters reported at the last word (87 requests): category 0.97, colour 1.00, size 1.00, brand 1.00, max_price 0.99. (A price that ends the request is still growing at that word; `finish()` settles it, so these understate the final reading.)
+Filters reported at the last word (87 requests): category 0.98, colour 1.00, size 1.00, brand 1.00, max_price 0.99. (A price that ends the request is still growing at that word; `finish()` settles it, so these understate the final reading.)
 
 ### Requests with a wrong final answer or a wrong early commit
 

@@ -11,7 +11,7 @@ from anticipatory.tokens import tokenize_text
 
 ROWS = load_rows()
 LEX = Lexicon(ROWS)
-FIX = "show me black sliders sorry I meant sandals size 8".split()
+FIX = "show me black clogs sorry I meant sandals size 8".split()
 
 
 def filters(lexicon, text):
@@ -24,25 +24,25 @@ class LearnedTest(unittest.TestCase):
         self.store = LearnedStore(self.path)
 
     def test_a_correction_teaches_the_unknown_word(self):
-        self.assertEqual(learn_from_request(FIX, LEX, self.store), [("sliders", "category", "sandals")])
+        self.assertEqual(learn_from_request(FIX, LEX, self.store), [("clogs", "category", "sandals")])
 
     def test_one_observation_is_not_enough_two_are(self):
         learn_from_request(FIX, LEX, self.store)
         self.assertEqual(self.store.active(), {})
         learn_from_request(FIX, LEX, self.store)
-        self.assertEqual(self.store.active(), {"sliders": ("category", "sandals")})
+        self.assertEqual(self.store.active(), {"clogs": ("category", "sandals")})
 
     def test_without_the_file_the_word_is_dropped_as_before(self):
         self.assertEqual(load_active(self.path), {})
-        self.assertIsNone(filters(LEX, "black sliders size 8")["category"])
+        self.assertIsNone(filters(LEX, "black clogs size 8")["category"])
 
     def test_with_the_file_the_word_is_understood_at_lower_confidence(self):
         for _ in range(2):
             learn_from_request(FIX, LEX, self.store)
         self.store.save()
         lex = Lexicon(ROWS, learned=load_active(self.path))
-        self.assertEqual(filters(lex, "black sliders size 8")["category"], "sandals")
-        mention = lex.lookup(tokenize_text("sliders"), 0)
+        self.assertEqual(filters(lex, "black clogs size 8")["category"], "sandals")
+        mention = lex.lookup(tokenize_text("clogs"), 0)
         self.assertEqual(mention.kind, "learned")
         self.assertLess(mention.confidence, 0.85)
 
@@ -63,10 +63,10 @@ class LearnedTest(unittest.TestCase):
     def test_evidence_against_switches_a_word_off(self):
         for _ in range(3):
             learn_from_request(FIX, LEX, self.store)
-        self.assertIn("sliders", self.store.active())
+        self.assertIn("clogs", self.store.active())
         for _ in range(2):
-            self.store.against("sliders")
-        self.assertNotIn("sliders", self.store.active())
+            self.store.against("clogs")
+        self.assertNotIn("clogs", self.store.active())
 
     def test_a_damaged_file_is_ignored(self):
         self.path.write_text("not json")

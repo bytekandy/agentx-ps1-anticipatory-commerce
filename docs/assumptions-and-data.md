@@ -125,7 +125,7 @@ early is 40.0, and the cut-off is 60% of the baseline, 12.0.
 ## 6. Known limitations
 Resolved or decided; the open ones come first.
 
-- **Synonyms outside the seed list are not understood** ("sliders", "lowers"). The agent notices a
+- **Synonyms outside the seed list are not understood** ("clogs", "lowers"). The agent notices a
   word it cannot place and does not commit early on it; the final answer is the best match
   without it. Stage 15 added a learning lexicon instead of pretrained vectors (below): words are
   taught by earlier requests, in a separate optional file.
@@ -157,7 +157,7 @@ be taught words by use. This needs no external data.
   agent only reads it, at start. **When the file is absent, a word the lexicon cannot place is
   dropped, exactly as before** (Round 1 and the harness run without it; dev 43.5 is measured
   without it).
-- **Evidence:** (1) a correction in a request ("sliders, I mean sandals" teaches sliders = sandals);
+- **Evidence:** (1) a correction in a request ("clogs, I mean sandals" teaches clogs = sandals);
   (2) an accepted product (the "This is what I wanted" button, `POST /api/feedback`): if exactly one
   unknown word was said and exactly one of category, colour and brand was not, they are linked;
   (3) repeat evidence: a word is used only after 2 agreeing observations and is switched off when

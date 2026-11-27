@@ -16,8 +16,9 @@ fills it from a real catalogue product (so every request has a real target), che
 slots the text mentions identify exactly that product, and records the gold filters. It also
 computes `earliest`: the first word after which the mentioned slots pin the target down for good.
 
-Some templates are expected to FAIL (tag `unseen_synonym`: "sliders", "lowers", "pullover" are not
-in the seed lexicon). They are here to measure honestly, not to be passed.
+Some templates are expected to FAIL (tag `unseen_synonym`: "lowers" and "pullover" are not in the
+seed lexicon; "sliders" has been added to it since). They are here to measure honestly, not to
+be passed.
 
 Deterministic: the same seed gives the same file.
 """
