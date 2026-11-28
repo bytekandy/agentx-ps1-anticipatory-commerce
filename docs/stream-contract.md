@@ -150,7 +150,7 @@ The commit word of the same request:
            "filters": {"category": "sneakers", "colour": "beige", "size": "10", "brand": "Loomsy", "max_price": 3000},
            "confidence": 0.95, "settled": true, "correction_pending": false, "pending_slots": [],
            "searched": true, "n_candidates": 1, "action": "commit", "product_id": "P0081",
-           "risk": 0.0252, "reason": "one product matches and the risk is low", "unresolved": []},
+           "risk": 0.0203, "reason": "one product matches and the risk is low", "unresolved": []},
  "commit": {"seq": 8, "product_id": "P0081",
             "product": {"product_id": "P0081", "title": "Loomsy Street Sneakers, Beige", "brand": "Loomsy",
                         "category": "sneakers", "colour": "beige", "size": "10", "price": 2899,

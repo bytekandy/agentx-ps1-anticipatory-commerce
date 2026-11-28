@@ -99,7 +99,7 @@ class UnknownColourTest(UnknownTestCase):
 
     def test_before_a_brand_or_colour(self):
         self.assertFlagged("purple Mehrin dress size S", "brand, colour or style", "purple")
-        self.assertFlagged("sky blue sneakers size 9", "brand, colour or style", "sky")
+        self.assertFlagged("pastel blue sneakers size 9", "brand, colour or style", "pastel")
 
     def test_after_in(self):
         self.assertFlagged("black sneakers in violet size 9", "colour or style", "violet")
@@ -201,7 +201,7 @@ class NoFalseFlagTest(UnknownTestCase):
     def test_no_clean_synthetic_request_is_flagged(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
         import make_training_data as gen
-        generator = gen.Generator(self.rows, 31)
+        generator = gen.Generator(self.rows, 31, outside_rate=0.0)
         bad = []
         for _ in range(1500):
             req = generator.request()
@@ -220,7 +220,7 @@ class ImpossibleRequestTest(UnknownTestCase):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
         import make_training_data as gen
         cfg = Config(unknown=UnknownConfig(enabled=enabled))
-        generator = gen.Generator(self.rows, 14)
+        generator = gen.Generator(self.rows, 14, outside_rate=0.0)
         rng = random.Random(14)
         agent = AnticipatoryAgent(InMemoryCatalog(self.rows), cfg, lexicon=self.lex)
         commits = tried = 0
@@ -253,3 +253,11 @@ class ImpossibleRequestTest(UnknownTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClosedSizeCueTest(UnknownTestCase):
+    def test_a_cue_that_closes_a_known_size_announces_no_number(self):
+        self.assertEqual(self.flags("white dress S size ek aur baat Mehrin"), [])
+
+    def test_a_cue_before_an_impossible_size_still_flags(self):
+        self.assertTrue(self.flags("white dress size 14 Mehrin"))

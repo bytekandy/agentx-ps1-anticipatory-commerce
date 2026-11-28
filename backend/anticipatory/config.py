@@ -16,6 +16,7 @@ class VocabConfig:
     confidence_exact: float = 0.95      # a word taken straight from the catalogue
     confidence_variant: float = 0.90    # plural, hyphen or spacing variant of such a word
     confidence_synonym: float = 0.85    # a synonym we listed ("slides" for sandals)
+    confidence_generated: float = 0.75  # a synonym taken from WordNet, not listed by hand
     confidence_fuzzy: float = 0.60      # a word that had to be spell-corrected (Stage 7)
     confidence_learned: float = 0.60    # a word taught by earlier requests (learned_lexicon.json)
     learned_min_count: int = 2          # evidence needed before a learned word is used

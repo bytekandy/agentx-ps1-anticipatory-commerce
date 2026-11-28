@@ -370,3 +370,11 @@ class DevSlotTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RomanisedSpellingTest(SlotsTestCase):
+    def test_another_spelling_reads_like_the_listed_word(self):
+        for spelt, colour in (("neelaa", "blue"), ("kaalaa", "black"), ("peelaa", "yellow")):
+            with self.subTest(spelt=spelt):
+                mention = self.assertSlot(f"{spelt} kurta", "colour", colour)
+                self.assertNotEqual(mention.kind, "fuzzy")      # a spelling, not a guess

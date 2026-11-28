@@ -60,10 +60,12 @@ class LearnedRiskTest(unittest.TestCase):
     def test_unsettled_is_never_safe(self):
         self.assertEqual(LearnedRisk.from_file().p_wrong(features(settled=False)), 1.0)
 
-    def test_a_weakly_read_value_is_riskier(self):
+    def test_a_weakly_read_value_is_never_safer(self):
+        # `conf_gap` may only add risk (train_risk.NON_NEGATIVE); weakly read values are also
+        # held back by hard rules (a guessed value never commits early)
         model = LearnedRisk.from_file()
-        self.assertGreater(model.p_wrong(features(weakest_confidence=0.6)),
-                           model.p_wrong(features(weakest_confidence=0.95)))
+        self.assertGreaterEqual(model.p_wrong(features(weakest_confidence=0.6)),
+                                model.p_wrong(features(weakest_confidence=0.95)))
 
     def test_a_pause_is_riskier_than_none(self):
         model = LearnedRisk.from_file()

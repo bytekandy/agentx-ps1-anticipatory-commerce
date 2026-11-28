@@ -4,7 +4,7 @@
     python scripts/make_training_data.py --count 5 --seed 1      # print a few examples
 
 A request is built from a random catalogue product: pick the filters that identify it, render
-each as a phrase (synonyms, number words, "Rs.", sizes as "UK 9" or "M size", Hindi words),
+each as a phrase (words of the shopper's world, see the pools below, number words, "Rs.", sizes as "UK 9" or "M size", Hindi words),
 add an opener and a filler tail, then optionally inject the two things that make early commits
 risky: a correction (about 18 percent of requests; the wrong value, a marker, the right value,
 either at once or after other content) and a late constraint ("oh, and from Pacevo").
@@ -28,8 +28,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from anticipatory.policy import InMemoryCatalog  # noqa: E402
 from anticipatory.config import DEFAULT_CONFIG  # noqa: E402
-from anticipatory.lexicon import (CATEGORY_SYNONYMS, COLOUR_SYNONYMS, SIZE_SYNONYMS,  # noqa: E402
-                                  Lexicon, load_rows)
+from anticipatory.lexicon import Lexicon, load_rows  # noqa: E402
 from anticipatory.policy import blocked_reason, search_filters  # noqa: E402
 from anticipatory.risk import RiskInput  # noqa: E402
 from anticipatory.state import FilterState  # noqa: E402
@@ -56,6 +55,58 @@ MARKERS = [("oops,", 3), ("sorry,", 9), ("no no,", 5), ("no, change that to", 6)
            ("I mean", 4), ("sorry, I meant", 7), ("nahi,", 2), ("matlab", 2), ("actually,", 4),
            ("no,", 4)]
 CORRECTION_SLOT_WEIGHTS = [("size", 23), ("colour", 18), ("brand", 13), ("category", 1)]
+
+# The shopper's world. These pools are written independently of the reader's synonym tables
+# (`anticipatory/lexicon.py`) and are deliberately NOT a copy of them: some words are in the
+# reader's tables, many are not ("trainers", "kicks", "mocha", "onyx"). Training on the reader's own
+# tables would only ever show the risk model requests the reader understands, so it could never
+# learn how often a word the reader cannot place leads it to a wrong early commit.
+# `OUTSIDE_RATE` is the chance that a phrase is drawn from these pools instead of the plain name.
+OUTSIDE_RATE = 0.30
+CATEGORY_WORDS = {
+    "running shoes": ["running shoe", "trainers", "gym shoes", "sports shoes", "jogging shoes",
+                      "track shoes", "runners", "running trainers"],
+    "sneakers": ["sneaker", "kicks", "canvas shoes", "casual shoes", "casual trainers", "plimsolls"],
+    "sandals": ["sandal", "flip flops", "flip-flops", "slides", "floaters", "chappals", "thongs",
+                "strappy sandals"],
+    "t-shirts": ["t-shirt", "tshirt", "tee", "tees", "t shirt", "round neck tee"],
+    "shirts": ["shirt", "formal shirt", "button down shirt"],
+    "jeans": ["jean", "denims", "denim jeans", "denim pants"],
+    "dresses": ["dress", "gown", "frock", "sundress", "one piece"],
+    "kurtas": ["kurta", "kurti", "kurtis", "kurtha"],
+    "hoodies": ["hoodie", "hoody", "sweatshirt", "pullover", "hooded sweatshirt", "jumper"],
+    "jackets": ["jacket", "coat", "windbreaker", "windcheater", "bomber", "blazer", "parka"],
+    "track pants": ["track pant", "trackpants", "joggers", "trackies", "sweatpants", "lowers",
+                    "jogger pants"],
+    "backpacks": ["backpack", "bag pack", "rucksack", "knapsack", "school bag", "daypack", "bagpack"],
+    "caps": ["cap", "baseball cap", "hat", "topi", "snapback"],
+    "headphones": ["headphone", "earphones", "earbuds", "headset", "over-ear headphones"],
+    "watches": ["watch", "wristwatch", "wrist watch", "timepiece", "smartwatch"],
+    "wallets": ["wallet", "purse", "billfold", "cardholder"],
+}
+COLOUR_WORDS = {
+    "black": ["jet black", "onyx", "kaala", "kali"],
+    "white": ["off white", "snow white", "safed"],
+    "blue": ["sky blue", "royal blue", "cobalt", "baby blue", "light blue", "neela"],
+    "grey": ["gray", "charcoal", "ash grey", "slate"],
+    "red": ["crimson", "scarlet", "lal", "cherry red"],
+    "green": ["emerald", "lime green", "mint", "hara", "bottle green"],
+    "pink": ["gulabi", "rose", "hot pink", "blush"],
+    "brown": ["bhura", "chocolate", "coffee", "mocha"],
+    "beige": ["cream", "nude", "sand"],
+    "gold": ["golden", "sunehri", "champagne"],
+    "navy": ["navy blue", "midnight blue"],
+    "maroon": ["burgundy", "wine", "oxblood"],
+    "olive": ["olive green", "army green"],
+    "yellow": ["mustard", "lemon yellow", "peela"],
+    "silver": ["chandi", "metallic silver"],
+    "tan": ["camel"],
+}
+SIZE_WORDS = {
+    "S": ["small"], "M": ["medium", "med"], "L": ["large"],
+    "XL": ["extra large", "x-large", "xl"], "XS": ["extra small", "x small"],
+    "XXL": ["double xl", "2xl", "extra extra large", "xx large"],
+}
 
 ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
@@ -102,11 +153,16 @@ def slip(word: str, rng: random.Random) -> str:
 
 
 class Generator:
-    def __init__(self, rows: List[Dict[str, str]], seed: int = 0, typo_rate: float = 0.0):
+    def __init__(self, rows: List[Dict[str, str]], seed: int = 0, typo_rate: float = 0.0,
+                 outside_rate: float = OUTSIDE_RATE):
         """`typo_rate` is the chance that a category, colour or brand phrase contains a typo.
-        Dev has none, so training leaves it at 0; robustness checks raise it."""
+        Dev has none, so training leaves it at 0; robustness checks raise it.
+        `outside_rate` is the chance that a category or colour is said with a word from the
+        shopper's world pools above (some unknown to the reader). 0 gives a closed world where
+        every phrase is one the reader lists: tests that check the reader use that."""
         self.rows = rows
         self.typo_rate = typo_rate
+        self.outside_rate = outside_rate
         self.rng = random.Random(seed)
         self.catalog = InMemoryCatalog(rows)
         self.by_category: Dict[str, List[Dict[str, str]]] = {}
@@ -158,13 +214,15 @@ class Generator:
 
     def category_phrase(self, value: str) -> str:
         rng = self.rng
-        pool = [value] * 6 + [singular(value)] * 2 + CATEGORY_SYNONYMS.get(value, [])
-        return rng.choice(pool)
+        words = CATEGORY_WORDS.get(value, [])
+        if words and rng.random() < self.outside_rate:
+            return rng.choice(words)
+        return rng.choice([value] * 6 + [singular(value)] * 2)
 
     def colour_phrase(self, value: str, standalone: bool) -> str:
         rng = self.rng
-        pool = [value] * 7 + COLOUR_SYNONYMS.get(value, [])
-        phrase = rng.choice(pool)
+        words = COLOUR_WORDS.get(value, [])
+        phrase = rng.choice(words) if words and rng.random() < self.outside_rate else value
         return ("in " + phrase) if standalone and rng.random() < 0.6 else phrase
 
     def brand_phrase(self, value: str, attached: bool) -> str:
@@ -185,7 +243,7 @@ class Generator:
                                f"size {value} UK", f"UK {value}", f"{value} UK",
                                f"size {word} UK"])
         pool = [f"size {value}"] * 4 + [f"{value} size", f"{value} size", value]
-        for alias in SIZE_SYNONYMS.get(value, []):
+        for alias in SIZE_WORDS.get(value, []):
             pool.append(alias)
             pool.append(f"size {alias}")
         return rng.choice(pool)

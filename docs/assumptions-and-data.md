@@ -9,11 +9,13 @@ was verified. Every figure below was measured; where something is a guess, it sa
 | Item | What it is | Where it comes from | Used for | In the repo? |
 |---|---|---|---|---|
 | `catalogue.csv`, `dev.jsonl`, `search.py`, `evaluate.py` | The organisers' starter kit | Given | The product catalogue, the scorer, the public dev set | Yes, unchanged (checked byte for byte against the base commit) |
-| Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 8,000 for validation, built from random catalogue products and hand-written phrasing pools | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
+| Training requests for the risk model | **Synthetic.** 30,000 shopper requests, plus 5,000 for validation, built from random catalogue products and hand-written phrasing pools. Since Stage 20, 30% of category and colour phrases come from pools written independently of the reader's synonym tables (`CATEGORY_WORDS`, `COLOUR_WORDS`, `SIZE_WORDS` in the generator): many words the reader cannot place ("trainers", "kicks", "mocha", "onyx"), so the model sees how often such words lead to a wrong early commit. The earlier generator reused the reader's own tables and could not | `scripts/make_training_data.py`, seeded | Training the 22-weight logistic regression and choosing its safety multiplier | Only the generator; the requests are regenerated on demand |
 | `anticipatory/data/risk_model.json` | The trained weights | Output of `scripts/train_risk.py` | Runtime risk estimate | Yes (0.8 KB) |
 | `data/dev_extra.jsonl` | **Hand-written** test requests (87), filled from real catalogue products | `scripts/build_dev_extra.py` | A test set with phrasing dev does not contain | Yes |
-| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch) |
+| Blind set (44 requests) | Hand-written, new phrasings, evaluated once | Written during the Stage 9 review | Estimating generalisation | No (scratch). Its one bug was fixed, so it is no longer unseen |
+| `data/dev_blind.jsonl` (200), `data/dev_brutal.jsonl` (97) | Hand-written from an outside-author prompt, deliberately hard wording | `scripts/build_blind.py` | Development sets: their failures were studied and rules were added for them | Yes. **Not blind any more** |
 | `anticipatory/data/english_words.tsv` | **External.** The 60,000 most frequent English words with counts | Peter Norvig's `count_1w.txt` (Google web corpus counts via the LDC; educational and research use; user accepted for a hackathon) | Telling real words from typos and names | Yes (912 KB) |
+| `anticipatory/data/generated_lexicon.json` | **External, built offline.** 189 synonyms for the 16 categories and colours taken from Princeton WordNet 3.0 (through `nltk`), one named meaning per value, with sense and dedupe rules | `scripts/build_wordnet_lexicon.py` (checked with `--check`; needs `requirements-build.txt`, never imported by the agent). WordNet 3.0 Copyright 2006 by Princeton University, used under the WordNet licence (use and redistribution allowed with this notice) | English synonyms and shades of catalogue values, read at confidence 0.75 and never an early commit | Yes (about 12 KB) |
 | Seed synonyms, cue words, number words, fillers | **Hand-written** language knowledge: about 90 synonyms, price and size cues, English and Hindi number words, Hindi and English fillers, correction markers | Me; part read off dev, part guessed (marked in the code) | The reader | Yes (`lexicon.py`, `numbers.py`) |
 
 So besides the catalogue and dev, there is exactly one external dataset (the word list), one
@@ -65,7 +67,7 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
 | `base_risk`, `confidence_weight`, `fresh_penalty` | 0.01, 0.2, 0.5 | Reasoned, not fitted | No (guesses) |
 | `correction_window` | 6 words | Dev showed 1 to 3; 6 is a margin | Weakly |
 | `restate_confidence`, `unmarked_revision_confidence` | 0.85, 0.6 | Reasoned | No (guesses) |
-| Learned safety multiplier | 4.0 | Smallest value whose wrong-commit rate on synthetic validation requests is no higher than the rules-only policy's | No (synthetic), but the synthetic world mimics dev |
+| Learned safety multiplier | 2.5 | Smallest value whose wrong-commit rate on synthetic validation requests is no higher than the rules-only policy's and under an absolute cap of 0.15% (`train_risk.py --max-wrong-rate`) | No (synthetic), but the synthetic world mimics dev |
 | Synthetic correction rate, delayed share, slot mix, pause rates | 18.3%, 42%, size 23 / colour 18 / brand 13 / category 1, 64% vs 16% | **Measured on dev** | **Yes** |
 | Confidence by source (exact 0.95, synonym 0.85, fuzzy 0.60, bare number 0.45...) | as listed | Reasoned | No (guesses) |
 | Spelling costs and limits, real-word ratio 100 | see `config.py` | Reasoned, then checked on synthetic typos and a protected-word list | No |
@@ -79,17 +81,30 @@ to fit anything.** The `dev.jsonl` file is read only by scripts and tests, never
 - The synthetic generator copies dev's rates and phrasing patterns.
 - `dev_extra` was written after reading dev, and bugs found on it were fixed, so it is no longer unseen.
 
-Nothing is fitted to dev's answers, but dev is **not** an unbiased estimate. The unbiased
-evidence is the blind set and the synthetic runs below.
+Nothing is fitted to dev's answers, but dev is **not** an unbiased estimate. `dev_blind` and
+`dev_brutal` are development sets too (their failures shaped the shade names, Hindi colour and size
+words, contrast and negation words, "not a size after" words, brand spelling mode and the denim
+rule). The only evidence nobody tuned against is the synthetic runs below (which mimic dev) and the
+hidden set itself.
+
+**Provenance and ablation** (`python scripts/provenance.py --ablate`, output in
+`outputs/provenance.md`): every group of hand-written words is counted per test set, and each group
+is switched off in turn. Result: switching off any group changes nothing on dev or dev_extra; the
+changes appear only on dev_blind and dev_brutal (up to -0.8 points and -0.021 accuracy on
+dev_brutal), the sets the groups were written from. Two groups change no set at all (footwear
+qualifiers, "not a size after" words). Most entries of the larger lists occur in no test set (for
+example 116 of 120 footwear phrases and 49 of 50 "colour word" shades): they are guesses about the
+hidden set. The connector wait is the one group that costs earliness (+0.5 on dev_extra without
+it) and buys safety (2 wrong early commits on dev_brutal without it).
 
 ## 4. The evidence and its limits
 | Test set | Size | Accuracy | Wrong early commits | Score | Kit baseline | Tuned on it? |
 |---|---|---|---|---|---|---|
-| dev | 300 | 1.000 | 0 | 43.6 | 20.0 (0.527) | Partly (section 3) |
-| dev_extra | 87 | 0.989 | 0 | 40.0 | 31.3 (0.793) | Bugs fixed on it |
-| dev_blind | 200 | 0.995 | 0 | 48.3 | 28.5 (0.720) | Failures studied, rules generalised from them |
-| dev_brutal | 97 | 1.000 | 0 | 40.4 | 24.3 (0.619) | Failures studied, rules generalised from them |
-| Blind set, before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** |
+| dev | 300 | 1.000 | 0 | 43.3 | 20.0 (0.527) | Partly (section 3) |
+| dev_extra | 87 | 0.989 | 0 | 40.1 | 31.3 (0.793) | Bugs fixed on it |
+| dev_blind | 200 | 0.995 | 0 | 46.9 | 28.5 (0.720) | Failures studied, rules generalised from them |
+| dev_brutal | 97 | 1.000 | 0 | 40.2 | 24.3 (0.619) | Failures studied, rules generalised from them |
+| Blind set (44), before any fix | 44 | 0.977 | 0 | 42.6 | 29.3 (0.750) | **No** (the only unseen test, run once) |
 | Blind set after fixing the one bug it found ("price cap") | 44 | 1.000 | 0 | 43.8 | | Now yes |
 | Synthetic, 4 seeds, typo rates 0 / 0 / 5% / 15% | 20,000 | 0.9993 | 50 requests (**0.25%**) | n/a | | Model trained on the same world |
 | Random word-soup fuzz | 20,000 | n/a | n/a | n/a | | n/a |
@@ -103,7 +118,7 @@ early is 40.0, and the cut-off is 60% of the baseline, 12.0.
 ## 5. Verification
 ### Final test (Stage 19), on a fresh clone of `main`
 - **Tests:** 467 pass with the server extras installed; 395 pass and 6 skip without them (the agent's own tests need only Python).
-- **Scores (official `evaluate.py`):** `agent.py` 43.6 on dev, 0 wrong commits; `agent_heuristic.py` 41.7; `agent_learned.py` 43.7 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.0, 0 wrong commits; kit baseline 20.0 and 31.3.
+- **Scores (official `evaluate.py`):** `agent.py` 43.3 on dev (43.6 before the risk model was retrained in Stage 20), 0 wrong commits; `agent_heuristic.py` 41.7; `agent_learned.py` 44.1 but 2 wrong commits (why the hybrid is the default); `agent.py` on `dev_extra` 40.1, 0 wrong commits; kit baseline 20.0 and 31.3.
 - **Reproducible:** `scripts/report.py` regenerates `results.jsonl` and `results_dev_extra.jsonl` byte for byte.
 - **Kit files untouched:** `catalogue.csv`, `dev.jsonl`, `evaluate.py`, `search.py` and `README.md` in `backend/` are identical to the first commit.
 - **Determinism and causality:** 80 random requests run twice give identical outputs, and every proper prefix (939) replayed in a fresh run matches the full run exactly: no lookahead.
@@ -157,7 +172,7 @@ be taught words by use. This needs no external data.
 
 - **Separate, optional file:** `backend/anticipatory/data/learned_lexicon.json` (git-ignored). The
   agent only reads it, at start. **When the file is absent, a word the lexicon cannot place is
-  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.6 is measured
+  dropped, exactly as before** (Round 1 and the harness run without it; dev 43.3 is measured
   without it).
 - **Evidence:** (1) a correction in a request ("clogs, I mean sandals" teaches clogs = sandals);
   (2) an accepted product (the "This is what I wanted" button, `POST /api/feedback`): if exactly one
@@ -183,3 +198,29 @@ be taught words by use. This needs no external data.
 - **Number words are ambiguous word by word.** "eight" may be size 8 or the start of "eight hundred"; price phrases run up to four words, so a number word is never acted on until it is settled.
 - **The vocabulary is small but the hidden set has unseen wording:** 300 requests use only 283 distinct tokens, which is why plurals, spelling variants, number words and Hindi forms are generalised in the lexicon rather than copied from dev.
 - **Reference agents (kit scorer):** no early commit with perfect reading 40.0; commit at the first unique product 32.7 (22 wrong commits); marker-aware with a one-word hold 39.6 (8 wrong commits). Our hybrid reaches 43.6 with none.
+
+## Stage 20 note: the training world is no longer the reader's own vocabulary
+- Before: `make_training_data.py` rendered phrases from the reader's synonym tables, so every training request was fully understood by the reader. The risk model could never learn the cost of a word the reader cannot place, and its wrong-commit estimates were optimistic.
+- Now: independent pools (30% of phrases); the unknown words make the heuristic itself less safe on the synthetic world (0.38% wrong on validation, was about 0.29%). The safety multiplier is chosen under an absolute cap of 0.15% instead of only "no worse than the heuristic" (that rule let the model get bolder exactly when the world got harder: x1.0 with 2 wrong commits on dev). Result: multiplier 2.5 (was 4.0), `conf_gap` kept non-negative, dev 43.3 (was 43.6), dev_blind 46.9 (was 48.3), 0 wrong commits on all four sets. The learned model is also more cautious on a clean request without a budget.
+- Known limit exposed (not fixed): a shade modifier ("dark blue" for navy, "dark red" for maroon, "light brown" for tan) is read as the bare colour at full confidence, so the reader can commit to the wrong colour. These three phrases are kept OUT of the training pools; handling modifiers belongs in the reader.
+- Also fixed on the way: a cue that closes a size already read ("S size ek aur...") no longer makes the next word an unknown size (`unknown.py`).
+
+## Stage 20 note: synonyms from WordNet instead of only from memory (finding 1)
+- Before: every synonym the reader knew was typed by us (88 entries; about half read off dev, the rest guessed), plus the leader's later lists fitted to two test sets. A word nobody listed was unknown.
+- Now: the long tail of English synonyms and shades comes from WordNet by rule (`generated_lexicon.json`, 189 words, rebuilt reproducibly). Sense rule (the word's commonest meaning must be ours), dedupe across values, no catalogue colour inside a category word, no "-ness" nouns, no "dark red" style intensity phrases, and a three-word `NOT_SOLD` list (sari, saree...) so something the shop does not sell stays unknown. Such a word reads at 0.75 and is a guess: never an early commit, but it can give the right final answer.
+- Five hand-typed guesses that WordNet confirms were removed from the tables ("tee shirt", "sweatpants", "back pack", "earphones", "windcheater").
+- Measured: independent 150-term probe (`scripts/coverage_probe.py`, written before WordNet, never tuned against) 45% to 53% understood; dev, dev_blind, dev_brutal unchanged (they hardly contain such words); dev_extra loses 0.5 points and 1.1% accuracy when the generated words are switched off (the file fixes one request it was not written from); 0 wrong early commits everywhere.
+- Still hand-typed and still a memory of ours: Hindi and Hinglish words (WordNet is English), informal words ("kicks", "trainers", "airpods"), the dev-evidenced seed synonyms, and every cue, filler and marker list.
+
+## Stage 20 experiment: word-vector meaning for unknown words (Model2Vec), measured, not shipped
+- Tried: `potion-base-8M` (MIT, 30 MB static word vectors) as a last-resort reader for a word no list explains: nearest catalogue category or colour name, only for a slot nothing else filled, a guess (never an early commit), threshold 0.40 chosen on probe 1 and judged on the held-out probe (`coverage_probe.py --held-out`, written before the model was tried). Code kept on the local branch `exp/semantic-model2vec`.
+- Result: the 4 request sets are unchanged (dev 43.31, dev_extra 40.07, dev_blind 46.9, dev_brutal 40.16; 0 wrong commits); synthetic accuracy with a third of phrases from outside pools unchanged (0.9197 to 0.9197); probe 1 +3 words (92 to 95 right of 145), held-out +7 (63 to 70), 0 new wrong readings, 5 of 295 non-product words claimed. Lower thresholds add right words but also wrong ones and more claimed junk (0.35: 14 claimed, 2 to 3 more wrong). Product-title and template prototypes did not beat plain value names. The 128M multilingual model was no better on this probe and is about 500 MB.
+- Cost: peak memory 33 MB to 162 MB, start-up +0.35 s, per-word latency unchanged (0.004 ms per lookup), a new optional dependency (`model2vec`, numpy), 30 MB of weights in the repository. 525 tests pass either way; without the package the agent behaves as before.
+- Where it fails: colour shades and modifiers ("midnight blue" for navy is the largest single error source in the synthetic world: 64 of 241 wrong requests; "onyx", "army green", "nude", "mint"), Hindi and Hinglish, compounds. A static word-vector table cannot place these.
+- Reading: it works and is safe, but its measured benefit is a few words in a hundred and nothing on the real sets, so it does not remove the hand-written memory problem.
+
+## Stage 20 experiment: Google Dakshina (romanised Hindi), checked, not added
+- Size: the dataset is one 2.0 GB tar (12 languages), CC BY-SA 4.0, no per-language download. `scripts/dakshina_probe.py` reads the tar by byte range and fetches only the Hindi lexicons (train 1.33 MB, dev 125 KB, test 128 KB) and the 10,000 romanised sentences (3.5 MB): about 5 MB. A derived word list (count at least 2) would be 11,054 words, about 100 KB.
+- Content: Wikipedia-style Hindi. Common words are covered well ("liye" 921, "tak" 368, "chahiye" 68); shopping words are thin or absent ("joota", "kurti", "peela", "sunehri", "dikhao", "milega" have no or one sentence).
+- Check 1, the respelling key behind `Lexicon.respell` (`transliteration_key`): it merges 31.9% of the 30,222 attested spelling variants of one Hindi word, but of the 11 real Hindi words it respells onto our listed words, 6 are the same word, 0 are a different word and 5 cannot be told. Widening the key (ai/e, au/o, ph/f, z/j, sh/s, y/i, a trailing "a" dropped) merges up to 37% of variants but respells wrong words ("haar" to "hara", "kaal" to "kaala", "harry" to "hari"). Kept unchanged: the data confirms its precision.
+- Check 2, a "known Hindi word" list for the unknown-word detector: it would hide real unknown brands. "Gucci" is in the sentences 9 times and "Tata" 8 times, more than the Hindi shopping words it would be meant to free ("saste" 4, "garmi" 5, "chamde" 5), so no frequency threshold separates Hindi words from brand names, and the capitalisation test cannot either for lowercase or spoken requests. The false flags it would fix are 4 of 297 requests (saste, sardi, chamde, garmi, all lowercase Hindi words wrongly read as brands by structure). Not added. Those false flags are better fixed by their cause: the "before ka, ki, ke, wala" brand pattern treats every word missing from the English list as name-like, which includes all romanised Hindi (finding 3).

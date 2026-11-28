@@ -320,3 +320,90 @@ class GeneratedPhrasesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransliterationTest(unittest.TestCase):
+    """Another romanised spelling of a listed Hindi word is the same word."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.lex = Lexicon(load_rows())
+
+    def test_key_ignores_what_writers_vary(self):
+        from anticipatory.lexicon import transliteration_key
+        self.assertEqual(transliteration_key("neelaa"), transliteration_key("nila"))
+        self.assertEqual(transliteration_key("kaalaa"), transliteration_key("kala"))
+        self.assertEqual(transliteration_key("bhooraa"), transliteration_key("bhura"))
+        self.assertNotEqual(transliteration_key("neela"), transliteration_key("peela"))
+
+    def test_other_spellings_find_the_listed_word(self):
+        for spelt, listed in (("neelaa", "neela"), ("kaalaa", "kaala"), ("haraa", "hara"),
+                              ("gulaabi", "gulabi"), ("chandee", "chandi"), ("topee", "topi"),
+                              ("chapals", "chappals")):
+            with self.subTest(spelt=spelt):
+                self.assertEqual(self.lex.respell(spelt), listed)
+
+    def test_known_and_english_words_are_left_alone(self):
+        for word in ("neela", "hare", "nile", "pile", "peel", "nikla", "red", "blue", "kal", "bag"):
+            with self.subTest(word=word):
+                self.assertIsNone(self.lex.respell(word))
+
+    def test_no_ordinary_english_word_is_respelt(self):
+        from anticipatory.tokens import english_words
+        changed = [w for w in english_words()._rank if self.lex.respell(w)]
+        self.assertEqual(changed, [])
+
+    def test_colliding_keys_are_dropped(self):
+        # no two listed words of different meaning may share a key
+        from anticipatory.lexicon import transliteration_key
+        seen = {}
+        for key, entry in self.lex._table.items():
+            if len(key) == 1 and entry.kind == "synonym":
+                seen.setdefault(transliteration_key(key[0]), set()).add((entry.slot, entry.value))
+        for key in self.lex._respell:
+            self.assertEqual(len(seen[key]), 1, key)
+
+
+class GeneratedLexiconTest(unittest.TestCase):
+    """The WordNet-built synonyms: loaded, low confidence, and clean by the build rules."""
+
+    @classmethod
+    def setUpClass(cls):
+        from anticipatory.lexicon import load_generated
+        cls.rows = load_rows()
+        cls.data = load_generated()
+        cls.lex = Lexicon(cls.rows)
+
+    def test_the_file_holds_words_for_both_slots(self):
+        self.assertGreater(sum(len(v) for v in self.data["category"].values()), 50)
+        self.assertGreater(sum(len(v) for v in self.data["colour"].values()), 40)
+
+    def test_a_generated_word_reads_with_the_generated_confidence(self):
+        for text, slot, value in (("knapsack", "category", "backpacks"), ("billfold", "category", "wallets"),
+                                  ("cerulean", "colour", "blue"), ("windbreaker", "category", "jackets")):
+            with self.subTest(text=text):
+                match = first_match(self.lex, text)
+                self.assertEqual((match.slot, match.value, match.kind), (slot, value, "generated"))
+                self.assertEqual(match.confidence, self.lex.config.confidence_generated)
+
+    def test_a_hand_written_word_wins_over_a_generated_one(self):
+        self.assertEqual(first_match(self.lex, "slides").kind, "synonym")
+
+    def test_the_build_rules_hold(self):
+        colours = {r["colour"] for r in self.rows}
+        for value, words in self.data["category"].items():
+            for w in words:
+                self.assertFalse(set(w.replace("-", " ").split()) & colours, (value, w))
+        for slot in ("category", "colour"):
+            seen = {}
+            for value, words in self.data[slot].items():
+                for w in words:
+                    self.assertNotIn(w, seen, f"{w} claimed by {seen.get(w)} and {value}")
+                    seen[w] = value
+                    self.assertFalse(w.endswith("ness"), w)
+        for w in ("sari", "saree", "caftan"):
+            self.assertIsNone(first_match(self.lex, w), w)
+
+    def test_without_the_file_nothing_is_added(self):
+        plain = Lexicon(self.rows, generated={})
+        self.assertIsNone(first_match(plain, "knapsack"))

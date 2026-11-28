@@ -23,6 +23,7 @@ Safety rules
     class builds from its own vocabulary; see that module for its guards.
 """
 import csv
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, replace
@@ -46,29 +47,29 @@ CATEGORY_SYNONYMS = {
                 # not seen in dev:
                 "flip flops", "chappals", "sliders", "slippers", "chappal"],
     "t-shirts": ["tshirt", "tee", "t shirt",
-                 # not seen in dev:
-                 "tee shirt"],
+                 # (more t-shirt words come from the WordNet file, see `generated_lexicon.json`)
+                 ],
     "jeans": ["denims", "denim"],
     "track pants": ["trackpants", "joggers",
                     # not seen in dev:
-                    "trackies", "sweatpants"],
+                    "trackies"],
     "hoodies": ["hooded sweatshirt", "sweatshirt",
                 # not seen in dev:
                 "hoody"],
     "backpacks": ["bag pack", "rucksack", "bag",
                   # not seen in dev:
-                  "back pack", "bagpack"],
+                  "bagpack"],
     # A sport qualifier before a Hindi or English shoe word: see FOOTWEAR_QUALIFIED below.
     "headphones": ["headset",
                    # not seen in dev:
-                   "earphones", "earbuds", "head phones"],
+                   "earbuds", "head phones"],
     "watches": ["wrist watch", "wristwatch",
                 # not seen in dev:
                 "smartwatch", "smart watch", "ghadi"],
     # not seen in dev:
     "kurtas": ["kurti"],
     "dresses": ["frock"],
-    "jackets": ["coat", "windcheater"],
+    "jackets": ["coat"],
     "caps": ["topi"],
     "wallets": ["purse"],
 }
@@ -134,6 +135,7 @@ HINDI_COLOUR_STEMS = {
 }
 HINDI_ENDINGS = ("a", "i", "e")
 HINDI_FORM_MAX_ENGLISH_RANK = 20_000            # a form this common in English is left out
+_RESPELL_MIN_LENGTH = 4                         # shorter words are too easily another word
 
 # A sport word before a shoe word, in English or Hindi, is a running shoe: "running wale joote",
 # "sports joota", "jogging shoe". The qualifier is required: plain "joote" names no category.
@@ -198,7 +200,19 @@ FILLER_WORDS: FrozenSet[str] = frozenset({
 
 # ----------------------------------------------------------------------------- data types
 
-_PRIORITY = {"exact": 0, "variant": 1, "synonym": 2}
+_PRIORITY = {"exact": 0, "variant": 1, "synonym": 2, "generated": 3}
+
+DEFAULT_GENERATED_PATH = Path(__file__).resolve().parent / "data" / "generated_lexicon.json"
+
+
+def load_generated(path: Optional[Path] = None) -> Dict[str, Dict[str, List[str]]]:
+    """The WordNet-built synonyms (`scripts/build_wordnet_lexicon.py`): {"category": {value: [words]},
+    "colour": {...}}. A missing or unreadable file means no generated words."""
+    try:
+        data = json.loads((path or DEFAULT_GENERATED_PATH).read_text(encoding="utf-8"))
+        return {slot: data[slot] for slot in ("category", "colour") if slot in data}
+    except (OSError, ValueError):
+        return {}
 
 
 @dataclass(frozen=True)
@@ -252,6 +266,20 @@ def _spellings(parts: Sequence[str]) -> Set[Tuple[str, ...]]:
     return keys
 
 
+# Romanised Hindi has no fixed spelling: neela, nila, neelaa, kaala, kaalaa, bhoora, chhota, chota.
+# The key drops what writers vary: long vowels are short, "chh" is "ch", "w" is "v", doubled
+# letters are single. Two spellings of one word share a key.
+_KEY_RULES = (("chh", "ch"), ("aa", "a"), ("ee", "i"), ("ii", "i"), ("oo", "u"), ("uu", "u"),
+              ("w", "v"))
+
+
+def transliteration_key(word: str) -> str:
+    word = word.lower()
+    for old, new in _KEY_RULES:
+        word = word.replace(old, new)
+    return re.sub(r"(.)\1+", r"\1", word)
+
+
 def _generated_phrases() -> List[Tuple[str, str, str]]:
     """(phrase, slot, value) made by rule from the tables above, rather than listed one by one."""
     out: List[Tuple[str, str, str]] = []
@@ -281,8 +309,11 @@ def _generated_phrases() -> List[Tuple[str, str, str]]:
 class Lexicon:
     def __init__(self, rows: Iterable[Dict[str, str]], config: Optional[VocabConfig] = None,
                  spelling: Optional[SpellingConfig] = None,
-                 learned: Optional[Dict[str, Tuple[str, str]]] = None):
+                 learned: Optional[Dict[str, Tuple[str, str]]] = None,
+                 generated: Optional[Dict[str, Dict[str, List[str]]]] = None):
+        """`generated` are WordNet-built synonyms; None loads the shipped file, {} uses none."""
         rows = list(rows)
+        self._generated = load_generated() if generated is None else generated
         self.config = config or DEFAULT_CONFIG.vocab
         self.categories: FrozenSet[str] = frozenset(r["category"] for r in rows)
         self.colours: FrozenSet[str] = frozenset(r["colour"] for r in rows)
@@ -301,6 +332,7 @@ class Lexicon:
         self._table: Dict[Tuple[str, ...], _Entry] = {}
         self._build()
         self._add_learned(learned or {})
+        self._respell: Dict[str, str] = self._build_respell()
         self.known_words: FrozenSet[str] = frozenset(
             {w for key in self._table for w in key}
             | {w for cue in PRICE_CUES for w in cue} | SIZE_CUES | CORRECTION_WORDS | LATE_WORDS
@@ -329,6 +361,7 @@ class Lexicon:
             "exact": self.config.confidence_exact,
             "variant": self.config.confidence_variant,
             "synonym": self.config.confidence_synonym,
+            "generated": self.config.confidence_generated,
             "learned": self.config.confidence_learned,
         }
 
@@ -412,6 +445,12 @@ class Lexicon:
             if value in known[slot]:
                 collect(phrase, slot, value, "synonym")
 
+        for slot, known in (("category", self.categories), ("colour", self.colours)):
+            for value, phrases in self._generated.get(slot, {}).items():
+                if value in known:
+                    for phrase in phrases:
+                        collect(phrase, slot, value, "generated", inflect=(slot == "category"))
+
         resolved: Set[Tuple[str, ...]] = set()
         for rank in sorted(set(_PRIORITY.values())):
             by_key: Dict[Tuple[str, ...], Set[Tuple[str, str, str]]] = defaultdict(set)
@@ -426,6 +465,32 @@ class Lexicon:
                     self._table[key] = _Entry(slot, value, kind)
                 else:
                     self.conflicts.append((key, meanings))
+
+    def _build_respell(self) -> Dict[str, str]:
+        """transliteration key -> the table word it stands for, for single-word synonyms that are
+        not ordinary English ("neela", "kaala", "chappals", "kurti"). Keys shared by words with
+        different meanings are dropped."""
+        english = english_words()
+        by_key: Dict[str, Dict[str, Tuple[str, str]]] = defaultdict(dict)
+        for key, entry in self._table.items():
+            if len(key) != 1 or entry.kind != "synonym" or len(key[0]) < _RESPELL_MIN_LENGTH:
+                continue
+            rank = english.rank(key[0])
+            if rank is None or rank > HINDI_FORM_MAX_ENGLISH_RANK:
+                by_key[transliteration_key(key[0])][key[0]] = (entry.slot, entry.value)
+        return {k: sorted(words)[0] for k, words in by_key.items()
+                if len({meaning for meaning in words.values()}) == 1}
+
+    def respell(self, text: str) -> Optional[str]:
+        """The listed word that `text` is another romanised spelling of ("neelaa" for "neela"),
+        or None. A word the lexicon, the catalogue or ordinary English already knows is left alone."""
+        if len(text) < _RESPELL_MIN_LENGTH or text in self.known_words \
+                or text in self.catalogue_words:
+            return None
+        rank = english_words().rank(text)
+        if rank is not None and rank <= HINDI_FORM_MAX_ENGLISH_RANK:
+            return None
+        return self._respell.get(transliteration_key(text))
 
     # -- queries -----------------------------------------------------------------------------
 

@@ -16,7 +16,8 @@ What it does
      would commit at, and fits again.
   4. Picks the safety multiplier by simulating the commit policy on fresh synthetic requests
      (score = 0.4 + 0.6 x earliness per right commit, -1.0 per wrong one): the smallest
-     multiplier whose wrong-commit rate is no higher than the hand-coded heuristic's. The
+     multiplier whose wrong-commit rate is no higher than the hand-coded heuristic's and no
+     higher than an absolute cap (`--max-wrong-rate`, default 0.15%, about half the 0.29% of the first shipped model). The
      policy simulated is the shipped one, `HybridRisk`: the heuristic's rules for fresh or
      just-paused values, the learned model otherwise. The model therefore has to win on
      earliness at equal safety. `dev.jsonl` stays an untouched test.
@@ -148,7 +149,26 @@ def solve(matrix: List[List[float]], rhs: List[float]) -> List[float]:
     return x
 
 
+# Features that can only ever ADD risk. A weaker reading cannot make a commit safer, so if the data
+# gives one of these a negative weight (a quirk of how the training requests were made, not a fact
+# about shoppers) it is switched off and the model refitted without it.
+NON_NEGATIVE = ("conf_gap",)
+
+
 def fit(groups: Sequence[Group], ridge: float = 1.0, iterations: int = 25) -> List[float]:
+    """Ridge-regularised logistic regression, with the `NON_NEGATIVE` features kept honest."""
+    w = _newton(groups, ridge, iterations)
+    off = [FEATURE_NAMES.index(n) for n in NON_NEGATIVE if w[FEATURE_NAMES.index(n)] < 0]
+    if off:
+        masked = [(tuple(0.0 if j in off else v for j, v in enumerate(vec)), n, wrong)
+                  for vec, n, wrong in groups]
+        w = _newton(masked, ridge, iterations)
+        for j in off:
+            w[j] = 0.0
+    return w
+
+
+def _newton(groups: Sequence[Group], ridge: float, iterations: int) -> List[float]:
     """Newton's method (IRLS) for ridge-regularised logistic regression."""
     d = len(FEATURE_NAMES)
     w = [0.0] * d
@@ -229,6 +249,9 @@ def main():
     parser.add_argument("--dev", default=str(BACKEND / "dev.jsonl"))
     parser.add_argument("--out", default=str(DEFAULT_MODEL_PATH))
     parser.add_argument("--no-write", action="store_true")
+    parser.add_argument("--max-wrong-rate", type=float, default=0.0015,
+                        help="the most wrong early commits (share of requests) the chosen "
+                             "multiplier may allow on validation, whatever the heuristic does")
     args = parser.parse_args()
 
     rows = load_rows()
@@ -272,7 +295,10 @@ def main():
 
     for m in (1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0):
         sim = simulate(val_req, hybrid(m), budget)
-        ok = sim["wrong_rate"] <= hand_val["wrong_rate"]
+        # No bolder than the heuristic AND under an absolute cap: on requests with words the reader
+        # cannot place the heuristic itself errs more, and "as safe as the heuristic" alone would
+        # then let the model be bolder exactly when the world is harder.
+        ok = sim["wrong_rate"] <= min(hand_val["wrong_rate"], args.max_wrong_rate)
         print(f"  x{m:<5} score {sim['score']:.2f}  wrong {sim['wrong']:4d} "
               f"({sim['wrong_rate']:.2%})  earliness {sim['early_share']:.1%}"
               f"{'   <- chosen' if ok and multiplier is None else ''}")

@@ -93,6 +93,18 @@ def _drop_possessives(tokens: Sequence[Token], lexicon: Lexicon) -> List[Token]:
     return out
 
 
+def _respell_hindi(tokens: List[Token], lexicon: Lexicon) -> List[Token]:
+    """Another romanised spelling of a listed Hindi word ("neelaa", "kaalaa", "chota") becomes the
+    listed spelling, before the spell-corrector can take it for a typo (which would cost
+    confidence): the two spellings are one word, not a guess."""
+    out = list(tokens)
+    for i, token in enumerate(tokens):
+        listed = lexicon.respell(token.text)
+        if listed:
+            out[i] = replace(token, text=listed)
+    return out
+
+
 def _correct_brands(tokens: List[Token], corrected: FrozenSet[int],
                     lexicon: Lexicon) -> Tuple[List[Token], FrozenSet[int]]:
     """Brand mode: a capitalised word the lexicon cannot place, long enough and not a common
@@ -135,6 +147,7 @@ def read_words(tokens: Sequence[Token], lexicon: Lexicon, config: Config = DEFAU
     """
     mentions: List[SlotMention] = []
     tokens = _drop_possessives(tokens, lexicon)
+    tokens = _respell_hindi(tokens, lexicon)
     tokens, corrected = lexicon.corrector.correct_tokens(tokens)
     tokens, corrected = _correct_brands(tokens, corrected, lexicon)
     corrected_tokens = tuple(tokens)
